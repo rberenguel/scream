@@ -1,0 +1,423 @@
+/* Scream — 3-pane minimal slide editor */
+
+@font-face {
+    font-family: 'OstrichSans';
+    src: url('../fonts/OstrichSans-Heavy.otf') format('opentype');
+    font-weight: 900;
+}
+
+@font-face {
+    font-family: 'OstrichSans';
+    src: url('../fonts/OstrichSans-Medium.otf') format('opentype');
+    font-weight: 500;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+    --bg:           #111;
+    --bg2:          #181818;
+    --bg3:          #1e1e1e;
+    --border:       #2c2c2c;
+    --text:         #d4d4d4;
+    --muted:        #555;
+    --accent:       #5b7fde;
+    --slide-bg:     #1a1a1a;
+    --slide-text:   #bf616a;  /* Nord --red = --h1-color */
+    --card-bg:      #1c1c1c;
+    --card-active:  #1e2a45;
+    --card-hover:   #222;
+    --status-h:     26px;
+}
+
+html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+}
+
+/* ── Loading overlay ──────────────────────────────────────────────────────── */
+
+#loading-overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 1rem;
+    background: var(--bg);
+    z-index: 100;
+    transition: opacity 0.25s;
+}
+
+#loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+#loading-overlay h1 {
+    margin: 0;
+    font-family: 'OstrichSans', sans-serif;
+    font-size: clamp(4rem, 10vw, 8rem);
+    font-weight: 900;
+    letter-spacing: 0.3em;
+    color: var(--slide-text);
+}
+
+#loading-overlay p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.88rem;
+}
+
+#loading-overlay code {
+    background: var(--bg3);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    font-size: 0.85em;
+}
+
+.overlay-buttons {
+    display: flex; gap: 0.75rem; margin-top: 0.5rem;
+}
+
+button {
+    padding: 0.55rem 1.3rem;
+    border: none; border-radius: 5px;
+    font-size: 0.9rem; cursor: pointer;
+    transition: opacity 0.15s;
+    background: var(--accent); color: #fff;
+}
+
+button.secondary {
+    background: var(--bg3);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+button:hover { opacity: 0.8; }
+
+.hint {
+    font-size: 0.72rem !important;
+    opacity: 0.45;
+    margin-top: 0.25rem !important;
+}
+
+kbd {
+    display: inline-block;
+    padding: 0.1em 0.4em;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 0.85em;
+    color: var(--text);
+}
+
+/* ── App shell ────────────────────────────────────────────────────────────── */
+
+#app {
+    position: fixed;
+    inset: 0;
+    bottom: var(--status-h);
+    display: grid;
+    grid-template-columns: 1fr 200px 1fr;
+    overflow: hidden;
+}
+
+#app.hidden { display: none; }
+
+/* ── Editor pane ──────────────────────────────────────────────────────────── */
+
+#editor-pane {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+    min-width: 0;
+}
+
+#editor-container {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+/* CodeMirror */
+#editor-container .cm-editor {
+    min-height: 100%;
+    background: var(--bg) !important;
+}
+
+#editor-container .cm-scroller {
+    padding: 2rem 1.5rem;
+    font-size: 15px;
+}
+
+#editor-container .cm-content,
+#editor-container .cm-line {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+#editor-container .cm-editor.cm-focused { outline: none; }
+
+#editor-container .cm-gutters {
+    background: var(--bg) !important;
+    border-right: none !important;
+}
+
+/* Highlight the active slide's # line in the editor */
+.cm-active-slide-line {
+    background: rgba(91, 127, 222, 0.08) !important;
+    border-left: 2px solid var(--accent);
+}
+
+/* ── Timeline pane ────────────────────────────────────────────────────────── */
+
+#timeline-pane {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+}
+
+#timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    user-select: none;
+}
+
+#timeline-count { font-variant-numeric: tabular-nums; }
+
+#timeline-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.4rem 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+.timeline-card {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0.15rem 0.4rem;
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+    user-select: none;
+    font-size: 0.8rem;
+    color: var(--text);
+    line-height: 1.3;
+    border: 1px solid transparent;
+    transition: background 0.1s;
+    position: relative;
+}
+
+.timeline-card:hover { background: var(--card-hover); }
+
+.timeline-card.active {
+    background: var(--card-active);
+    border-color: rgba(91, 127, 222, 0.4);
+    color: #fff;
+}
+
+.timeline-card .card-num {
+    font-size: 0.6rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 1.6em;
+    flex-shrink: 0;
+    padding-top: 0.15em;
+}
+
+.timeline-card.active .card-num { color: var(--accent); }
+
+.timeline-card .card-title {
+    flex: 1;
+    word-break: break-word;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.timeline-card[draggable="true"] { cursor: grab; }
+.timeline-card.dragging { opacity: 0.35; cursor: grabbing; }
+
+/* Drop indicator line — injected dynamically between cards */
+.timeline-drop-indicator {
+    display: none;
+    height: 0;
+    margin: 0 0.4rem;
+    pointer-events: none;
+    position: relative;
+}
+
+.timeline-drop-indicator.visible {
+    display: block;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin: 2px 0.5rem;
+    box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* ── Preview pane ─────────────────────────────────────────────────────────── */
+
+#preview-pane {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    background: var(--bg);
+    overflow: hidden;
+}
+
+#slide-preview {
+    width: 100%;
+    max-height: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--slide-bg);
+    border: 1px solid #434c5e;  /* Nord --dark2 = --background-modifier-border */
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 30px rgba(0,0,0,0.6);
+    container-type: inline-size;
+    overflow: hidden;
+    position: relative;
+}
+
+#slide-content {
+    padding: 8% 10%;
+    text-align: center;
+    width: 100%;
+    color: var(--slide-text);
+    font-family: 'OstrichSans', sans-serif;
+    font-size: 11cqi;
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    word-break: break-word;
+    hyphens: auto;
+}
+
+#slide-content.empty {
+    font-family: -apple-system, sans-serif;
+    font-size: 3cqi;
+    font-weight: 400;
+    color: #444;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+/* Inline markdown inside slide titles */
+/* Nord palette: --yellow: #ebcb8b, ostrich dark strong override: #ff7043 */
+#slide-content strong {
+    color: #ff7043;
+    font-weight: 900;
+}
+
+#slide-content em {
+    color: #ebcb8b;
+    font-style: italic;
+}
+
+#slide-content code {
+    font-family: 'monoid', monospace;
+    font-size: 0.8em;
+    color: #b5cea8;
+    background: rgba(255,255,255,0.06);
+    padding: 0.05em 0.25em;
+    border-radius: 3px;
+}
+
+/* Phosphor icons inside slide.
+ * .ph-light (from phosphor.css) sets font-family + ::before renders the glyph.
+ * We override text-transform so the CSS ::before content isn't uppercased. */
+#slide-content .ph-light {
+    font-size: 1.1em;
+    vertical-align: middle;
+    line-height: 1;
+    display: inline-block;
+    text-transform: none !important;
+    letter-spacing: 0;
+}
+
+/* Slide index badge */
+#slide-index-badge {
+    position: absolute;
+    bottom: 3%;
+    right: 3%;
+    font-size: 1.5cqi;
+    color: #333;
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+    pointer-events: none;
+}
+
+/* ── Status bar ───────────────────────────────────────────────────────────── */
+
+#status-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: var(--status-h);
+    padding: 0 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    z-index: 50;
+    user-select: none;
+}
+
+#status-filename {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#status-slide { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+#status-save {
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.3s;
+    color: var(--accent);
+}
+
+#status-save.visible { opacity: 1; }
+
+.status-btn {
+    padding: 0 0.6rem;
+    height: 18px;
+    font-size: 10px;
+    border-radius: 3px;
+    background: var(--bg3);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.status-btn:hover { color: var(--text); opacity: 1; }

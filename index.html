@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scream</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="icons/icon-32.png" type="image/png" />
+    <meta name="theme-color" content="#111111" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="fonts/phosphor/phosphor.css" />
+    <script type="importmap">
+    {
+        "imports": {
+            "CodeMirrorBundle": "./libs/codemirror-bundle.js"
+        }
+    }
+    </script>
+</head>
+<body>
+
+    <div id="loading-overlay">
+        <h1>SCREAM</h1>
+        <p>One idea per slide. <code># Header</code> = slide. Everything else stays in the editor.</p>
+        <div class="overlay-buttons">
+            <button id="open-btn">Open .md file</button>
+            <button id="new-btn" class="secondary">New</button>
+        </div>
+        <p class="hint">Press <kbd>O</kbd> to open &nbsp;·&nbsp; <kbd>N</kbd> for new</p>
+    </div>
+
+    <div id="app" class="hidden">
+        <div id="editor-pane">
+            <div id="editor-container"></div>
+        </div>
+        <div id="timeline-pane">
+            <div id="timeline-header">
+                <span>Slides</span>
+                <span id="timeline-count"></span>
+            </div>
+            <div id="timeline-list"></div>
+        </div>
+        <div id="preview-pane">
+            <div id="slide-preview">
+                <div id="slide-content" class="empty">—</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="status-bar">
+        <span id="status-filename">No file</span>
+        <span id="status-slide"></span>
+        <span id="status-save"></span>
+        <button id="export-btn" class="status-btn" title="Export as standalone HTML (Cmd-E)">Export HTML</button>
+    </div>
+
+    <script src="libs/marked.min.js"></script>
+    <script type="module" src="js/main.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js');
+        }
+    </script>
+</body>
+</html>
