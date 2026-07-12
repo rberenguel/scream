@@ -2,7 +2,7 @@
   "name": "Scream",
   "short_name": "Scream",
   "description": "Minimal slide editor for learn-to-teach presentations",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#111111",

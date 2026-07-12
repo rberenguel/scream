@@ -1,6 +1,6 @@
 # Scream
 
-A minimal browser-based slide with minimal friction and minimal text.
+A minimal browser-based slide editor. One idea per slide, maximum friction reduction for teaching prep.
 
 ## Concept
 
@@ -15,6 +15,8 @@ Three panes, always visible:
 | **Editor** | Full markdown. Write `#` headers for slides; anything beneath is private notes. |
 | **Timeline** | One card per `#` header. Drag to reorder — reordering moves the markdown blocks too. Click to jump. |
 | **Preview** | Current slide rendered large, with Nord/OstrichSans styling. |
+
+The app opens directly into a blank slide. Press `?` or click the `?` button (top-right) for the built-in shortcut reference.
 
 ## Slide syntax
 
@@ -32,24 +34,74 @@ Eddington 1919 eclipse experiment. Connect back to gravity.
 Key insight. Let it land.
 ```
 
-- `*italic*` → highlighted in Nord yellow
-- `**bold**` → highlighted in Nord red-orange
-- `:chat:` or `:ph-chat:` → [Phosphor Light](https://phosphoricons.com) icon
+- `*italic*` → Nord yellow
+- `**bold**` → Nord red-orange
+- `:ph-name:` → [Phosphor Light](https://phosphoricons.com) icon
+- `:in-name:` → [Iconoir](https://iconoir.com) icon
 
-## Keyboard shortcuts
+Type `:ph-` or `:in-` in the editor for autocomplete.
+
+Pressing `Enter` on a `# ` line inserts a blank line followed by a new `# `, ready for the next slide. The blank line is available for notes.
+
+## Image layouts
+
+Place an image with a special alt-text keyword anywhere in a slide title to trigger a layout:
+
+| Syntax | Effect |
+|--------|--------|
+| `![bg](url)` | Full-bleed background, image dimmed and blurred, text on top |
+| `![bg brightness(60%) blur(2px)](url)` | Background with custom filter |
+| `![left](url) text` | 50/50 split — image left, text right |
+| `![right](url) text` | 50/50 split — image right, text left |
+| `![anything](url)` (lone image, no text) | Simple fill, no overlay |
+
+Multiple `![bg](url)` images on the same slide produce a vertically sliced background.
+
+A `backgrounds/` folder at the project root is a convenient place to store local images; reference them as `![bg](backgrounds/myfile.jpg)`.
+
+## Styling
+
+### CSS preamble
+
+Place a fenced CSS block before the first slide to define custom classes:
+
+````markdown
+```css
+.red   { color: #bf3030 }
+.large { font-size: 14cqi }
+```
+
+# First slide
+````
+
+The block is live in the editor and inlined into exports.
+
+### Inline spans
+
+Wrap part of a slide title in a class with `.classname { content }`:
+
+```markdown
+# Hello .red { world }
+# .large { BIG } and normal
+```
+
+Renders as `Hello <span class="red">world</span>` etc. Markdown and icons work inside the braces too.
+
+## Editor shortcuts
 
 | Key | Action |
 |-----|--------|
-| `Cmd-S` | Save (shows file picker if no file open yet) |
-| `Cmd-O` | Open a `.md` file |
-| `O` | Open (when editor not focused) |
-| `N` | New blank presentation (when editor not focused) |
+| `Cmd-S` | Save (shows file picker on first save) |
+| `Cmd-O` / `O` | Open a `.md` file |
+| `Cmd-E` | Export as standalone HTML |
+| `Tab` | Insert tab character |
+| `?` | Toggle help overlay |
 
 ## Export
 
-`Cmd-E` (or the Export button) generates a fully standalone `.html` file — fonts inlined, zero external dependencies. Open it in any browser to present.
+`Cmd-E` (or the Export button) generates a fully standalone `.html` file — all fonts base64-inlined, zero external dependencies. Open it in any browser to present.
 
-### Exported presentation controls
+### Presentation controls
 
 | Key | Action |
 |-----|--------|
@@ -57,6 +109,7 @@ Key insight. Let it land.
 | `Home` / `End` | First / last slide |
 | `O` | Toggle overview sidebar |
 | `N` | Toggle speaker notes panel |
+| `L` | Toggle light / dark theme |
 | `P` | Open presenter window (synced via BroadcastChannel) |
 | `B` | Blackout screen |
 | `D` | Enter / exit draw mode |
@@ -69,9 +122,9 @@ Key insight. Let it land.
 | `R` | Rectangle |
 | `E` | Ellipse |
 | `H` | Highlight (semi-transparent fill) |
-| `T` | Text (click to place, type, Enter or Esc to commit) |
-| `I` | Interact — click to select/drag shapes, no new drawing |
-| `F` | Toggle fill — rect and ellipse get a solid fill blended from the stroke colour and the slide background |
+| `T` | Text (click to place, Enter or Esc to commit) |
+| `I` | Interact — select/drag existing shapes |
+| `F` | Toggle fill (rect/ellipse get a solid fill) |
 | `C` | Pick colour: `r` red · `o` orange · `y` yellow · `b` blue · `g` green · `w` white |
 | `X` | Clear all annotations |
 | `Backspace` | Delete selected shape |
@@ -81,7 +134,7 @@ Annotations clear automatically on slide change.
 
 ## File handling
 
-Open a `.md` file via the button, `O`, or `Cmd-O`. Drag-and-drop a `.md` file onto the window also works (read-only; use the button or `Cmd-O` to get write access). Save with `Cmd-S`.
+Open via the **Open** button, `O`, or `Cmd-O`. Drag-and-drop a `.md` file onto the window also works (read-only; use Open or `Cmd-O` to get write access). Save with `Cmd-S`.
 
 ## Running
 
@@ -91,3 +144,7 @@ Serve the folder with any static server, e.g.:
 python3 -m http.server 8080
 # then open http://localhost:8080
 ```
+
+## Inspiration
+
+Scream is a standalone spinoff of ideas from [obsidian-preso-plugin](https://github.com/rberenguel/obsidian-preso-plugin), a presentation plugin for Obsidian that is itself inspired by [Deckset](https://www.deckset.com/). The image layout syntax (`bg`, `left`, `right` alt-text keywords) and the split/background CSS are adapted directly from it.

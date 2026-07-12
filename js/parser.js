@@ -6,6 +6,18 @@
  */
 
 /**
+ * Extract CSS from a ```css fenced block that appears before the first slide.
+ * @param {string} text
+ * @returns {string}
+ */
+export function parsePreambleCss(text) {
+    const firstSlide = /^#\s/m.exec(text);
+    const before = firstSlide ? text.slice(0, firstSlide.index) : text;
+    const m = before.match(/```css\s*\n([\s\S]*?)\n```/);
+    return m ? m[1].trim() : '';
+}
+
+/**
  * @param {string} markdown
  * @returns {Slide[]}
  */

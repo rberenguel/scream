@@ -9,6 +9,7 @@
     <meta name="theme-color" content="#111111" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="stylesheet" href="fonts/phosphor/phosphor.css" />
+    <link rel="stylesheet" href="fonts/iconoir-font.css" />
     <script type="importmap">
     {
         "imports": {
@@ -19,17 +20,7 @@
 </head>
 <body>
 
-    <div id="loading-overlay">
-        <h1>SCREAM</h1>
-        <p>One idea per slide. <code># Header</code> = slide. Everything else stays in the editor.</p>
-        <div class="overlay-buttons">
-            <button id="open-btn">Open .md file</button>
-            <button id="new-btn" class="secondary">New</button>
-        </div>
-        <p class="hint">Press <kbd>O</kbd> to open &nbsp;·&nbsp; <kbd>N</kbd> for new</p>
-    </div>
-
-    <div id="app" class="hidden">
+    <div id="app">
         <div id="editor-pane">
             <div id="editor-container"></div>
         </div>
@@ -48,10 +39,67 @@
     </div>
 
     <div id="status-bar">
-        <span id="status-filename">No file</span>
+        <span id="status-filename">untitled.md</span>
         <span id="status-slide"></span>
         <span id="status-save"></span>
+        <button id="open-btn" class="status-btn" title="Open .md file (Cmd-O)">Open</button>
         <button id="export-btn" class="status-btn" title="Export as standalone HTML (Cmd-E)">Export HTML</button>
+    </div>
+
+    <button id="help-btn" title="Help (?)"><i class="ph-light ph-question"></i></button>
+
+    <div id="help-overlay" class="hidden" role="dialog" aria-modal="true">
+        <div id="help-box">
+            <h1>SCREAM <span id="help-version"></span></h1>
+            <p class="help-tagline">One idea per slide. Low-friction teaching prep.</p>
+            <div class="help-grid">
+                <section>
+                    <h2>Slides</h2>
+                    <dl>
+                        <dt><code># Heading</code></dt><dd>new slide</dd>
+                        <dt><kbd>Enter</kbd> on <code>#</code> line</dt><dd>insert next slide</dd>
+                        <dt><kbd>Tab</kbd></dt><dd>indent in notes</dd>
+                        <dt>drag timeline card</dt><dd>reorder slides</dd>
+                    </dl>
+                </section>
+                <section>
+                    <h2>File</h2>
+                    <dl>
+                        <dt><kbd>⌘S</kbd></dt><dd>save</dd>
+                        <dt><kbd>⌘O</kbd> / <kbd>O</kbd></dt><dd>open</dd>
+                        <dt><kbd>⌘E</kbd></dt><dd>export HTML</dd>
+                    </dl>
+                </section>
+                <section>
+                    <h2>Icons</h2>
+                    <dl>
+                        <dt><code>:ph-name:</code></dt><dd>Phosphor icon</dd>
+                        <dt><code>:in-name:</code></dt><dd>Iconoir icon</dd>
+                    </dl>
+                    <p class="help-hint">Type <code>:ph-</code> or <code>:in-</code> for autocomplete</p>
+                </section>
+                <section>
+                    <h2>Styling</h2>
+                    <dl>
+                        <dt><code>```css … ```</code></dt><dd>CSS preamble<br><span class="help-hint">(before first slide)</span></dd>
+                        <dt><code>.cls { text }</code></dt><dd>wrap text in<br><code>&lt;span class="cls"&gt;</code></dd>
+                    </dl>
+                </section>
+                <section>
+                    <h2>Presentation</h2>
+                    <dl>
+                        <dt><kbd>P</kbd></dt><dd>presenter window</dd>
+                        <dt><kbd>← →</kbd> / <kbd>Space</kbd></dt><dd>navigate</dd>
+                        <dt><kbd>O</kbd></dt><dd>overview sidebar</dd>
+                        <dt><kbd>N</kbd></dt><dd>notes panel</dd>
+                        <dt><kbd>D</kbd></dt><dd>draw mode</dd>
+                        <dt><kbd>L</kbd></dt><dd>toggle light theme</dd>
+                        <dt><kbd>B</kbd></dt><dd>blackout</dd>
+                    </dl>
+                </section>
+            </div>
+            <button id="help-close" class="help-close"><i class="ph-light ph-x"></i></button>
+        </div>
     </div>
 
     <script src="libs/marked.min.js"></script>

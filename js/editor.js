@@ -3,15 +3,17 @@ import {
     defaultKeymap, history, historyKeymap,
     markdown, oneDark, languages, markdownLanguage, GFM,
     StateField, Decoration, RangeSetBuilder,
+    autocompletion, completionKeymap,
 } from "CodeMirrorBundle";
 
 import { parseSlides, slideAtLine } from './parser.js';
+import { PHOSPHOR_ICONS } from './phosphor-icons.js';
+import { ICONOIR_ICONS } from './iconoir-icons.js';
 
 /** @type {EditorView|null} */
 let editorView = null;
 
 // ── Active-slide line highlight ────────────────────────────────────────────
-// Computes from cursor position on every transaction — no StateEffect needed.
 
 const highlightField = StateField.define({
     create: () => Decoration.none,
@@ -32,20 +34,60 @@ const highlightField = StateField.define({
     provide: f => EditorView.decorations.from(f),
 });
 
+// ── Icon autocompletion ────────────────────────────────────────────────────
+// Triggers after : followed by at least one letter, completes :icon-name:
+
+/** @param {import("CodeMirrorBundle").CompletionContext} ctx */
+function iconCompletionSource(ctx) {
+    const match = ctx.matchBefore(/:(ph|in)-[a-z0-9-]*/);
+    if (!match) return null;
+    const m = match.text.match(/^:(ph|in)-(.*)$/);
+    if (!m) return null;
+    const [, prefix, partial] = m;
+    const icons = prefix === 'ph' ? PHOSPHOR_ICONS : ICONOIR_ICONS;
+    return {
+        from: match.from,
+        options: icons
+            .filter(n => n.startsWith(partial))
+            .map(n => ({ label: `:${prefix}-${n}:`, type: 'keyword', detail: prefix === 'ph' ? 'phosphor' : 'iconoir' })),
+        validFor: /^:(ph|in)-[a-z0-9-]*:?$/,
+    };
+}
+
+// ── Enter: new slide on # lines ────────────────────────────────────────────
+
+function enterOnSlideHeader(view) {
+    const state = view.state;
+    const sel = state.selection.main;
+    const line = state.doc.lineAt(sel.head);
+    if (!line.text.startsWith('# ')) return false;
+    // Insert blank line + new header, cursor after '# '
+    const insert = '\n\n# ';
+    view.dispatch({
+        changes: { from: line.to, insert },
+        selection: { anchor: line.to + insert.length },
+        scrollIntoView: true,
+    });
+    return true;
+}
+
 // ── Setup ──────────────────────────────────────────────────────────────────
 
 /**
  * @param {HTMLElement} container
  * @param {string} initialDoc
- * @param {{ onUpdate: (doc: string, cursorLine: number) => void, onSave: () => void }} callbacks
+ * @param {{ onUpdate: (doc: string, cursorLine: number) => void, onSave: () => void, onOpen: () => void, onExport: () => void }} callbacks
  */
 export function setupEditor(container, initialDoc, { onUpdate, onSave, onOpen, onExport }) {
     const screamKeymap = keymap.of([
         { key: 'Mod-s', run: () => { onSave?.(); return true; } },
         { key: 'Mod-o', run: () => { onOpen?.(); return true; } },
         { key: 'Mod-e', run: () => { onExport?.(); return true; } },
+        { key: 'Enter', run: enterOnSlideHeader },
+        { key: 'Tab', run: (view) => { view.dispatch(view.state.replaceSelection('\t')); return true; } },
         ...defaultKeymap,
         ...historyKeymap,
+        ...completionKeymap,
     ]);
 
     const state = EditorState.create({
@@ -57,6 +99,7 @@ export function setupEditor(container, initialDoc, { onUpdate, onSave, onOpen, o
             oneDark,
             EditorView.lineWrapping,
             highlightField,
+            autocompletion({ override: [iconCompletionSource] }),
             EditorView.updateListener.of((update) => {
                 if (!update.docChanged && !update.selectionSet) return;
                 const doc = update.state.doc;
@@ -78,6 +121,14 @@ export function setDoc(text) {
     editorView.dispatch({
         changes: { from: 0, to: editorView.state.doc.length, insert: text },
     });
+}
+
+/** Place cursor at end of document and focus. */
+export function placeCursorAtEnd() {
+    if (!editorView) return;
+    const end = editorView.state.doc.length;
+    editorView.dispatch({ selection: { anchor: end } });
+    editorView.focus();
 }
 
 /** @returns {string} */

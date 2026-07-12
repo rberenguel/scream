@@ -28,6 +28,24 @@
     --card-active:  #1e2a45;
     --card-hover:   #222;
     --status-h:     26px;
+
+    /* Solarized palette — for use in CSS preamble and inline styles */
+    --base03:  #002b36;
+    --base02:  #073642;
+    --base01:  #586e75;
+    --base00:  #657b83;
+    --base0:   #839496;
+    --base1:   #93a1a1;
+    --base2:   #eee8d5;
+    --base3:   #fdf6e3;
+    --yellow:  #b58900;
+    --orange:  #cb4b16;
+    --red:     #dc322f;
+    --magenta: #d33682;
+    --violet:  #6c71c4;
+    --blue:    #268bd2;
+    --cyan:    #2aa198;
+    --green:   #859900;
 }
 
 html, body {
@@ -40,78 +58,6 @@ html, body {
     font-size: 14px;
 }
 
-/* ── Loading overlay ──────────────────────────────────────────────────────── */
-
-#loading-overlay {
-    position: fixed; inset: 0;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 1rem;
-    background: var(--bg);
-    z-index: 100;
-    transition: opacity 0.25s;
-}
-
-#loading-overlay.hidden { opacity: 0; pointer-events: none; }
-
-#loading-overlay h1 {
-    margin: 0;
-    font-family: 'OstrichSans', sans-serif;
-    font-size: clamp(4rem, 10vw, 8rem);
-    font-weight: 900;
-    letter-spacing: 0.3em;
-    color: var(--slide-text);
-}
-
-#loading-overlay p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.88rem;
-}
-
-#loading-overlay code {
-    background: var(--bg3);
-    padding: 0.1em 0.35em;
-    border-radius: 3px;
-    font-size: 0.85em;
-}
-
-.overlay-buttons {
-    display: flex; gap: 0.75rem; margin-top: 0.5rem;
-}
-
-button {
-    padding: 0.55rem 1.3rem;
-    border: none; border-radius: 5px;
-    font-size: 0.9rem; cursor: pointer;
-    transition: opacity 0.15s;
-    background: var(--accent); color: #fff;
-}
-
-button.secondary {
-    background: var(--bg3);
-    color: var(--text);
-    border: 1px solid var(--border);
-}
-
-button:hover { opacity: 0.8; }
-
-.hint {
-    font-size: 0.72rem !important;
-    opacity: 0.45;
-    margin-top: 0.25rem !important;
-}
-
-kbd {
-    display: inline-block;
-    padding: 0.1em 0.4em;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    font-family: monospace;
-    font-size: 0.85em;
-    color: var(--text);
-}
-
 /* ── App shell ────────────────────────────────────────────────────────────── */
 
 #app {
@@ -122,8 +68,6 @@ kbd {
     grid-template-columns: 1fr 200px 1fr;
     overflow: hidden;
 }
-
-#app.hidden { display: none; }
 
 /* ── Editor pane ──────────────────────────────────────────────────────────── */
 
@@ -305,6 +249,7 @@ kbd {
     padding: 8% 10%;
     text-align: center;
     width: 100%;
+    background: var(--slide-bg);
     color: var(--slide-text);
     font-family: 'OstrichSans', sans-serif;
     font-size: 11cqi;
@@ -314,6 +259,7 @@ kbd {
     text-transform: uppercase;
     word-break: break-word;
     hyphens: auto;
+    -webkit-font-smoothing: antialiased;
 }
 
 #slide-content.empty {
@@ -346,10 +292,11 @@ kbd {
     border-radius: 3px;
 }
 
-/* Phosphor icons inside slide.
- * .ph-light (from phosphor.css) sets font-family + ::before renders the glyph.
- * We override text-transform so the CSS ::before content isn't uppercased. */
-#slide-content .ph-light {
+/* Icon sizing inside slides — both Phosphor and Iconoir use font + ::before.
+ * text-transform must be none or the uppercase parent breaks the glyph lookup. */
+#slide-content .ph-light,
+#slide-content [class^="iconoirfont-"],
+#slide-content [class*=" iconoirfont-"] {
     font-size: 1.1em;
     vertical-align: middle;
     line-height: 1;
@@ -368,6 +315,98 @@ kbd {
     font-variant-numeric: tabular-nums;
     user-select: none;
     pointer-events: none;
+}
+
+/* ── Image layout modes ──────────────────────────────────────────────────── */
+
+#slide-content.layout-fill,
+#slide-content.layout-bg,
+#slide-content.layout-split {
+    height: 100%;
+    padding: 0;
+}
+
+#slide-content.layout-fill {
+    background-size: cover;
+    background-position: center;
+}
+
+#slide-content.layout-bg {
+    background-size: cover;
+    background-position: center;
+    position: relative;
+}
+
+.bg-slice-container {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+.bg-slice {
+    flex: 1;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    filter: var(--custom-bg-filter, brightness(80%) blur(4px));
+    transform: scale(1.05); /* prevent blur edge from showing inside bounds */
+}
+
+.bg-content-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 4cqi;
+    box-sizing: border-box;
+}
+.bg-content-wrapper::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background-color: rgba(0, 0, 0, 0.3);
+}
+body.light-theme .bg-content-wrapper::before {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+.bg-content-wrapper > * {
+    position: relative;
+    z-index: 2;
+}
+
+#slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+body.light-theme #slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
+    text-shadow: 0 0 6px rgba(255,255,255,0.7), 0 0 1px rgba(255,255,255,0.5);
+}
+
+#slide-content.layout-split {
+    display: flex;
+    flex-direction: row;
+}
+#slide-content.layout-split.split-right {
+    flex-direction: row-reverse;
+}
+.split-image-pane {
+    flex: 0 0 50%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+}
+.split-text-pane {
+    flex: 0 0 50%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 4cqi;
+    box-sizing: border-box;
 }
 
 /* ── Status bar ───────────────────────────────────────────────────────────── */
@@ -421,3 +460,157 @@ kbd {
 }
 
 .status-btn:hover { color: var(--text); opacity: 1; }
+
+/* ── Help button ──────────────────────────────────────────────────────────── */
+
+#help-btn {
+    position: fixed;
+    top: 0.75rem;
+    right: 0.9rem;
+    z-index: 60;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--muted);
+    font-size: 15px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+#help-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+    opacity: 1;
+}
+
+/* ── Help overlay ─────────────────────────────────────────────────────────── */
+
+#help-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+
+#help-overlay.hidden { display: none; }
+
+#help-box {
+    position: relative;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2rem 2.5rem 1.75rem;
+    max-width: 680px;
+    width: calc(100vw - 4rem);
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+
+#help-box h1 {
+    margin: 0 0 0.2rem;
+    font-family: 'OstrichSans', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 900;
+    letter-spacing: 0.25em;
+    color: var(--slide-text);
+}
+
+#help-version {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--muted);
+    vertical-align: middle;
+}
+
+.help-tagline {
+    margin: 0 0 1.5rem;
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+.help-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem 2rem;
+}
+
+#help-box h2 {
+    margin: 0 0 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+
+#help-box dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.3rem 0.75rem;
+    font-size: 0.88rem;
+    align-items: baseline;
+}
+
+#help-box dt {
+    color: var(--text);
+    white-space: nowrap;
+}
+
+#help-box dd {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+#help-box code {
+    font-size: 0.85em;
+    background: var(--bg3);
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+    color: var(--text);
+}
+
+#help-box kbd {
+    display: inline-block;
+    padding: 0.1em 0.35em;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 0.85em;
+    color: var(--text);
+    background: var(--bg3);
+}
+
+.help-hint {
+    margin: 0.4rem 0 0;
+    font-size: 0.78rem;
+    color: var(--muted);
+    opacity: 0.7;
+}
+
+.help-close {
+    position: absolute;
+    top: 0.75rem; right: 0.75rem;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.25rem;
+    line-height: 1;
+    opacity: 0.6;
+}
+
+.help-close:hover { opacity: 1; color: var(--text); }

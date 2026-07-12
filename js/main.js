@@ -2,8 +2,8 @@
  * main.js — wires editor, timeline, and preview together.
  */
 
-import { setupEditor, setDoc, getDoc, goToLine } from './editor.js';
-import { parseSlides, slideAtLine, reorderSlides } from './parser.js';
+import { setupEditor, setDoc, getDoc, goToLine, placeCursorAtEnd } from './editor.js';
+import { parseSlides, slideAtLine, reorderSlides, parsePreambleCss } from './parser.js';
 import { initTimeline, renderTimeline } from './timeline.js';
 import { renderPreview } from './preview.js';
 import { exportPresentation } from './exporter.js';
@@ -21,13 +21,12 @@ let filename = '';
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
 
-let loadingOverlay, app, timelineList, timelineCount;
+let app, timelineList, timelineCount;
 let statusFilename, statusSlide, statusSave;
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadingOverlay = document.getElementById('loading-overlay');
     app            = document.getElementById('app');
     timelineList   = document.getElementById('timeline-list');
     timelineCount  = document.getElementById('timeline-count');
@@ -47,8 +46,12 @@ document.addEventListener('DOMContentLoaded', () => {
     );
 
     document.getElementById('open-btn').addEventListener('click', handleOpen);
-    document.getElementById('new-btn').addEventListener('click', handleNew);
     document.getElementById('export-btn').addEventListener('click', handleExport);
+    document.getElementById('help-btn').addEventListener('click', () => toggleHelp(true));
+    document.getElementById('help-close').addEventListener('click', () => toggleHelp(false));
+    document.getElementById('help-overlay').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) toggleHelp(false);
+    });
     document.addEventListener('keydown', handleGlobalKey);
 
     document.addEventListener('dragover', (e) => e.preventDefault());
@@ -57,6 +60,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('beforeunload', (e) => {
         if (dirty) { e.preventDefault(); e.returnValue = ''; }
     });
+
+    // Skip splash — start directly in the editor
+    handleNew();
 });
 
 // ── File operations ────────────────────────────────────────────────────────
@@ -82,8 +88,8 @@ async function handleOpen() {
 function handleNew() {
     fileHandle = null;
     filename = 'untitled.md';
-    const starter = '# ';
-    loadContent(starter, filename);
+    loadContent('# ', filename);
+    placeCursorAtEnd();
 }
 
 async function handleSave() {
@@ -128,7 +134,7 @@ async function handleDrop(e) {
 
 async function handleExport() {
     if (!slides.length) { alert('Nothing to export — open or create a presentation first.'); return; }
-    await exportPresentation(slides, filename || 'presentation.md');
+    await exportPresentation(slides, filename || 'presentation.md', { preambleCss: parsePreambleCss(getDoc()) });
 }
 
 // ── Load ───────────────────────────────────────────────────────────────────
@@ -136,9 +142,6 @@ async function handleExport() {
 async function loadContent(content, name) {
     filename = name;
     setDoc(content);
-
-    loadingOverlay.classList.add('hidden');
-    app.classList.remove('hidden');
 
     statusFilename.textContent = name;
     dirty = false;
@@ -151,12 +154,13 @@ async function loadContent(content, name) {
 // ── Editor change handler ──────────────────────────────────────────────────
 
 async function handleEditorUpdate(docText, cursorLine) {
-    if (!app || app.classList.contains('hidden')) return;
+    if (!app) return;
 
     // Mark dirty on any edit after initial load
     if (docText !== getDoc() || dirty) _markDirty();
 
     slides = parseSlides(docText);
+    _injectUserCss(docText);
     const idx = slides.length > 0 ? slideAtLine(slides, cursorLine) : -1;
 
     activeIndex = idx;
@@ -222,10 +226,36 @@ function handleGlobalKey(e) {
     if (inInput || e.metaKey || e.ctrlKey) return;
 
     if (e.key === 'o') { e.preventDefault(); handleOpen(); }
-    if (e.key === 'n') { e.preventDefault(); handleNew(); }
+    if (e.key === '?') { e.preventDefault(); toggleHelp(); }
+    if (e.key === 'Escape') { toggleHelp(false); }
 }
 
 // ── Dirty / save indicator ─────────────────────────────────────────────────
+
+let _version = null;
+
+async function toggleHelp(force) {
+    const overlay = document.getElementById('help-overlay');
+    const show = force !== undefined ? force : overlay.classList.contains('hidden');
+    overlay.classList.toggle('hidden', !show);
+    if (show && _version === null) {
+        try {
+            const { version } = await fetch('./manifest.json').then(r => r.json());
+            _version = version ?? '';
+        } catch { _version = ''; }
+        document.getElementById('help-version').textContent = _version ? `v${_version}` : '';
+    }
+}
+
+function _injectUserCss(docText) {
+    let el = document.getElementById('scream-user-css');
+    if (!el) {
+        el = document.createElement('style');
+        el.id = 'scream-user-css';
+        document.head.appendChild(el);
+    }
+    el.textContent = parsePreambleCss(docText);
+}
 
 function _markDirty() {
     if (dirty) return;

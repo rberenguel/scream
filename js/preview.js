@@ -10,18 +10,32 @@ const contentEl = () => document.getElementById('slide-content');
 const badgeEl   = () => document.getElementById('slide-index-badge');
 
 /**
- * Convert :icon-name: sequences to Phosphor icons.
- * Phosphor uses compound CSS classes + ::before pseudo-element, so the element
- * must be empty — the icon glyph comes entirely from CSS, not text content.
- *
- * Supports both :chat: and :ph-chat: (ph- prefix is normalised away).
+ * Convert :ph-NAME: (Phosphor) and :in-NAME: (Iconoir) sequences to icon elements.
+ * Both use font + CSS ::before — element must be empty.
+ * Bare :NAME: defaults to Phosphor for backward compat.
  * Must run AFTER marked.parseInline so marked never sees the raw HTML tags.
  *
- * @param {string} html  - already-parsed HTML string
+ * @param {string} html
  * @returns {string}
  */
+/**
+ * Wrap .classname { content } in <span class="classname">content</span>.
+ * Runs after marked so the content may already contain HTML (bold, icons, etc).
+ * @param {string} html
+ * @returns {string}
+ */
+function expandInlineStyles(html) {
+    return html.replace(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)\s*\{([^}]*)\}/g, (_, cls, body) =>
+        `<span class="${cls}">${body}</span>`
+    );
+}
+
 function expandIcons(html) {
     return html.replace(/:([a-z][a-z0-9-]+):/g, (_, name) => {
+        if (name.startsWith('in-')) {
+            const cls = `iconoirfont-${name.slice(3)}`;
+            return `<i class="${cls}" aria-hidden="true"></i>`;
+        }
         const cls = name.startsWith('ph-') ? name : `ph-${name}`;
         return `<i class="ph-light ${cls}" aria-hidden="true"></i>`;
     });
@@ -37,30 +51,91 @@ export function renderPreview(title, index, total) {
     if (!el) return;
 
     if (!title) {
-        el.innerHTML = '—';
-        el.className = 'empty';
-        el.style.fontSize = '';
+        const empty = document.createElement('div');
+        empty.id = 'slide-content';
+        empty.className = 'empty';
+        empty.textContent = '—';
+        el.replaceWith(empty);
         _clearBadge();
         return;
     }
 
-    // Parse inline markdown first, then expand icons in the resulting HTML
-    el.innerHTML = expandIcons(marked.parseInline(title));
-    el.className = '';
+    const html = expandInlineStyles(expandIcons(marked.parseInline(title)));
+    el.replaceWith(_buildSlideContentEl(html));
+    _setBadge(index, total);
+}
 
-    // Scale font by the visible text length (strip tags for measurement)
-    const textLen = el.textContent.length;
-    if (textLen > 60) {
-        el.style.fontSize = '5cqi';
-    } else if (textLen > 35) {
-        el.style.fontSize = '7cqi';
-    } else if (textLen > 20) {
-        el.style.fontSize = '9cqi';
-    } else {
-        el.style.fontSize = '';   // default 11cqi from CSS
+function _buildSlideContentEl(html) {
+    const shadow = document.createElement('div');
+    shadow.innerHTML = html;
+
+    const el = document.createElement('div');
+    el.id = 'slide-content';
+
+    const allImages = Array.from(shadow.querySelectorAll('img'));
+
+    // Lone image with no layout alt and no other text → simple fill
+    if (allImages.length === 1 &&
+        !allImages[0].alt.match(/^(bg|left|right)/) &&
+        shadow.textContent.trim() === '') {
+        el.classList.add('layout-fill');
+        el.style.backgroundImage = `url("${allImages[0].src}")`;
+        return el;
     }
 
-    _setBadge(index, total);
+    const imageInfos = allImages.map(img => ({
+        el: img,
+        match: img.alt.match(/^(bg|left|right)(?:\s+(.*))?$/),
+    }));
+    const bgInfos  = imageInfos.filter(i => i.match && i.match[1] === 'bg');
+    const sideInfo = imageInfos.find(i => i.match && (i.match[1] === 'left' || i.match[1] === 'right'));
+
+    if (bgInfos.length > 0) {
+        el.classList.add('layout-bg');
+
+        const sliceContainer = document.createElement('div');
+        sliceContainer.className = 'bg-slice-container';
+        bgInfos.forEach(info => {
+            const slice = document.createElement('div');
+            slice.className = 'bg-slice';
+            slice.style.backgroundImage = `url("${info.el.src}")`;
+            sliceContainer.appendChild(slice);
+            (info.el.closest('p') || info.el).remove();
+        });
+        shadow.querySelectorAll('p').forEach(p => { if (!p.textContent.trim()) p.remove(); });
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'bg-content-wrapper';
+        const filter = bgInfos[0].match[2]?.trim();
+        if (filter) wrapper.style.setProperty('--custom-bg-filter', filter);
+        wrapper.append(...shadow.childNodes);
+        el.append(sliceContainer, wrapper);
+
+    } else if (sideInfo) {
+        const side = sideInfo.match[1];
+        const src  = sideInfo.el.src;
+        (sideInfo.el.closest('p') || sideInfo.el).remove();
+        shadow.querySelectorAll('p').forEach(p => { if (!p.innerHTML.trim()) p.remove(); });
+
+        el.classList.add('layout-split', side === 'left' ? 'split-left' : 'split-right');
+        const imgPane = document.createElement('div');
+        imgPane.className = 'split-image-pane';
+        imgPane.style.backgroundImage = `url("${src}")`;
+        const txtPane = document.createElement('div');
+        txtPane.className = 'split-text-pane';
+        txtPane.append(...shadow.childNodes);
+        el.append(imgPane, txtPane);
+
+    } else {
+        const textLen = shadow.textContent.length;
+        el.style.fontSize =
+            textLen > 60 ? '5cqi' :
+            textLen > 35 ? '7cqi' :
+            textLen > 20 ? '9cqi' : '';
+        el.append(...shadow.childNodes);
+    }
+
+    return el;
 }
 
 function _setBadge(index, total) {
