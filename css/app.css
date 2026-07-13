@@ -28,6 +28,7 @@
     --card-active:  #1e2a45;
     --card-hover:   #222;
     --status-h:     26px;
+    --tab-h:        28px;
 
     /* Solarized palette — for use in CSS preamble and inline styles */
     --base03:  #002b36;
@@ -60,9 +61,90 @@ html, body {
 
 /* ── App shell ────────────────────────────────────────────────────────────── */
 
+/* ── Tab bar ──────────────────────────────────────────────────────────────── */
+
+#tab-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: var(--tab-h);
+    display: flex;
+    align-items: stretch;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    z-index: 50;
+    overflow: hidden;
+    padding-right: 40px; /* leave room for help button */
+}
+
+.tab-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0 0.5rem 0 0.65rem;
+    min-width: 80px;
+    max-width: 180px;
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    user-select: none;
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s;
+}
+
+.tab-item:hover { background: var(--bg3); color: var(--text); }
+
+.tab-item.active {
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.tab-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tab-dirty {
+    font-size: 7px;
+    color: var(--accent);
+    flex-shrink: 0;
+    line-height: 1;
+    display: none;
+}
+
+.tab-item.is-dirty .tab-dirty { display: block; }
+
+.tab-close {
+    flex-shrink: 0;
+    opacity: 0;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    line-height: 1;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    transition: opacity 0.1s;
+}
+
+.tab-item:hover .tab-close { opacity: 0.6; }
+.tab-close:hover { opacity: 1 !important; background: var(--bg2); color: var(--text); }
+
+/* ── App shell ────────────────────────────────────────────────────────────── */
+
 #app {
     position: fixed;
-    inset: 0;
+    top: var(--tab-h);
+    left: 0; right: 0;
     bottom: var(--status-h);
     display: grid;
     grid-template-columns: 1fr 200px 1fr;
@@ -465,20 +547,20 @@ body.light-theme #slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
 
 #help-btn {
     position: fixed;
-    top: 0.75rem;
-    right: 0.9rem;
+    top: calc((var(--tab-h) - 22px) / 2);
+    right: 0.6rem;
     z-index: 60;
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
     padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg2);
+    background: transparent;
     border: 1px solid var(--border);
     border-radius: 50%;
     color: var(--muted);
-    font-size: 15px;
+    font-size: 13px;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
 }

@@ -78,11 +78,13 @@ function enterOnSlideHeader(view) {
  * @param {string} initialDoc
  * @param {{ onUpdate: (doc: string, cursorLine: number) => void, onSave: () => void, onOpen: () => void, onExport: () => void }} callbacks
  */
-export function setupEditor(container, initialDoc, { onUpdate, onSave, onOpen, onExport }) {
+export function setupEditor(container, initialDoc, { onUpdate, onSave, onOpen, onExport, onNewTab, onCloseTab }) {
     const screamKeymap = keymap.of([
         { key: 'Mod-s', run: () => { onSave?.(); return true; } },
         { key: 'Mod-o', run: () => { onOpen?.(); return true; } },
         { key: 'Mod-e', run: () => { onExport?.(); return true; } },
+        { key: 'Mod-t', run: () => { onNewTab?.(); return true; } },
+        { key: 'Mod-w', run: () => { onCloseTab?.(); return true; } },
         { key: 'Enter', run: enterOnSlideHeader },
         { key: 'Tab', run: (view) => { view.dispatch(view.state.replaceSelection('\t')); return true; } },
         ...defaultKeymap,
