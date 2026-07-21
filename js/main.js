@@ -25,6 +25,30 @@ function _isTabPristine(tab) {
     return !tab.dirty && tab.filename === 'untitled.md' && tab.content.trim() === '#';
 }
 
+// ── Draft persistence (localStorage) ─────────────────────────────────────
+
+const DRAFT_KEY = 'scream:draft';
+
+function _saveDraft(tab) {
+    try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ content: tab.content, filename: tab.filename }));
+    } catch { /* quota exceeded or private browsing */ }
+}
+
+
+function _restoreDraft() {
+    try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (!raw) return;
+        const { content, filename } = JSON.parse(raw);
+        if (!content || content.trim() === '#') return;
+        const tab = getActiveTab();
+        if (!tab || !_isTabPristine(tab)) return;
+        tab.filename = filename || 'untitled.md';
+        _activateTab(tab.id, content);
+    } catch { /* corrupted entry */ }
+}
+
 // ── Per-render derived state ───────────────────────────────────────────────
 
 let slides = [];
@@ -60,6 +84,13 @@ document.addEventListener('DOMContentLoaded', () => {
         },
     );
 
+    document.getElementById('editor-container').addEventListener('keyup', (e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+            const tab = getActiveTab();
+            if (tab) _saveDraft(tab);
+        }
+    });
+
     tabBar.addEventListener('dblclick', (e) => {
         if (e.target === tabBar) { createTab(); placeCursorAtEnd(); }
     });
@@ -67,6 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('open-btn').addEventListener('click', handleOpen);
     document.getElementById('export-btn').addEventListener('click', handleExport);
     document.getElementById('help-btn').addEventListener('click', () => toggleHelp(true));
+    setupTimelineDrawer();
+    setupMenuDrawer();
     document.getElementById('help-close').addEventListener('click', () => toggleHelp(false));
     document.getElementById('help-overlay').addEventListener('click', (e) => {
         if (e.target === e.currentTarget) toggleHelp(false);
@@ -79,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     createTab();
+    _restoreDraft();
     placeCursorAtEnd();
 });
 
@@ -206,32 +240,63 @@ async function handleSave() {
     const tab = getActiveTab();
     if (!tab) return;
     const text = getDoc();
+    const suggestedName = (tab.label && tab.label !== 'untitled' ? tab.label : 'presentation') + '.md';
 
-    if (!tab.fileHandle) {
+    if (tab.fileHandle) {
+        try {
+            const writable = await tab.fileHandle.createWritable();
+            await writable.write(text);
+            await writable.close();
+            tab.dirty = false;
+            _updateSaveIndicator();
+            _flashSave('Saved');
+            renderTabBar();
+        } catch (err) {
+            console.error('[Scream] save error:', err);
+            alert(`Could not save: ${err.message}`);
+        }
+        return;
+    }
+
+    if (window.showSaveFilePicker) {
         try {
             tab.fileHandle = await window.showSaveFilePicker({
-                suggestedName: (tab.label && tab.label !== 'untitled' ? tab.label : 'presentation') + '.md',
+                suggestedName,
                 types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
             });
             tab.filename = tab.fileHandle.name;
             statusFilename.textContent = tab.filename;
+            const writable = await tab.fileHandle.createWritable();
+            await writable.write(text);
+            await writable.close();
+            tab.dirty = false;
+            _updateSaveIndicator();
+            _flashSave('Saved');
+            renderTabBar();
         } catch (err) {
-            if (err.name !== 'AbortError') console.error('[Scream] save-picker error:', err);
-            return;
+            if (err.name !== 'AbortError') console.error('[Scream] save error:', err);
         }
+        return;
     }
 
     try {
-        const writable = await tab.fileHandle.createWritable();
-        await writable.write(text);
-        await writable.close();
+        const blob = new Blob([text], { type: 'text/markdown' });
+        const file = new File([blob], suggestedName, { type: 'text/markdown' });
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: suggestedName });
+        } else {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = suggestedName;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        }
         tab.dirty = false;
         _updateSaveIndicator();
         _flashSave('Saved');
         renderTabBar();
     } catch (err) {
-        console.error('[Scream] save error:', err);
-        alert(`Could not save: ${err.message}`);
+        if (err.name !== 'AbortError') console.error('[Scream] save error:', err);
     }
 }
 
@@ -366,6 +431,171 @@ async function toggleHelp(force) {
         } catch { _version = ''; }
         document.getElementById('help-version').textContent = _version ? `v${_version}` : '';
     }
+}
+
+// ── Mobile menu drawer (left edge) ────────────────────────────────────────
+
+function setupMenuDrawer() {
+    const menu     = document.getElementById('menu-pane');
+    const backdrop = document.getElementById('menu-backdrop');
+    const mq       = window.matchMedia('(max-width: 900px)');
+    const DRAWER_W       = 220;
+    const EDGE_ZONE      = 30;
+    const SNAP_THRESHOLD = 60;
+
+    let dragging = false;
+    let startX   = 0;
+    let isOpen   = false;
+
+    function setOpen(open) {
+        isOpen = open;
+        document.body.classList.toggle('menu-open', open);
+        menu.style.transition = 'transform 0.25s ease';
+        menu.style.transform  = open ? 'translateX(0)' : `translateX(-${DRAWER_W}px)`;
+    }
+
+    if (mq.matches) menu.style.transform = `translateX(-${DRAWER_W}px)`;
+    mq.addEventListener('change', () => {
+        if (mq.matches) {
+            menu.style.transform = `translateX(-${DRAWER_W}px)`;
+        } else {
+            menu.style.transition = '';
+            menu.style.transform  = '';
+            isOpen = false;
+            document.body.classList.remove('menu-open');
+        }
+    });
+
+    document.addEventListener('touchstart', (e) => {
+        dragging = false;
+        if (!mq.matches) return;
+        if (document.body.classList.contains('timeline-open')) return;
+        const x = e.touches[0].clientX;
+        if (!isOpen && x <= EDGE_ZONE) {
+            dragging = true;
+            startX   = x;
+        } else if (isOpen && !e.target.closest('.menu-action')) {
+            dragging = true;
+            startX   = x;
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!dragging || !mq.matches) return;
+        const dx     = e.touches[0].clientX - startX;
+        const offset = isOpen
+            ? Math.max(-DRAWER_W, Math.min(0, dx))
+            : Math.max(-DRAWER_W, Math.min(0, -DRAWER_W + dx));
+        menu.style.transition = 'none';
+        menu.style.transform  = `translateX(${offset}px)`;
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+        if (!dragging || !mq.matches) return;
+        dragging     = false;
+        const dx     = e.changedTouches[0].clientX - startX;
+        const shouldOpen = isOpen ? dx > -SNAP_THRESHOLD : dx > SNAP_THRESHOLD;
+        setOpen(shouldOpen);
+    }, { passive: true });
+
+    document.addEventListener('touchcancel', () => {
+        if (!dragging) return;
+        dragging = false;
+        menu.style.transition = 'transform 0.25s ease';
+        menu.style.transform  = isOpen ? 'translateX(0)' : `translateX(-${DRAWER_W}px)`;
+    }, { passive: true });
+
+    backdrop.addEventListener('click', () => setOpen(false));
+
+    function action(id, fn) {
+        document.getElementById(id).addEventListener('click', () => { setOpen(false); fn(); });
+    }
+
+    action('menu-new',    () => { createTab(); placeCursorAtEnd(); });
+    action('menu-open',   handleOpen);
+    action('menu-save',   handleSave);
+    action('menu-export', handleExport);
+    action('menu-help',   () => toggleHelp(true));
+}
+
+// ── Mobile timeline drawer ─────────────────────────────────────────────────
+
+function setupTimelineDrawer() {
+    const timeline = document.getElementById('timeline-pane');
+    const backdrop = document.getElementById('timeline-backdrop');
+    const mq       = window.matchMedia('(max-width: 900px)');
+    const DRAWER_W       = 200;
+    const EDGE_ZONE      = 30;  // px from right edge to start open gesture
+    const SNAP_THRESHOLD = 60;  // px of travel needed to snap
+
+    let dragging = false;
+    let startX   = 0;
+    let isOpen   = false;
+
+    function setOpen(open) {
+        isOpen = open;
+        document.body.classList.toggle('timeline-open', open);
+        timeline.style.transition = 'transform 0.25s ease';
+        timeline.style.transform  = open ? 'translateX(0)' : `translateX(${DRAWER_W}px)`;
+    }
+
+    function onMqChange() {
+        if (!mq.matches) {
+            // Leaving mobile: clear all inline overrides
+            timeline.style.transition = '';
+            timeline.style.transform  = '';
+            isOpen = false;
+            document.body.classList.remove('timeline-open');
+        } else {
+            // Entering mobile: sync inline style to closed state
+            timeline.style.transform = `translateX(${DRAWER_W}px)`;
+        }
+    }
+
+    mq.addEventListener('change', onMqChange);
+    if (mq.matches) timeline.style.transform = `translateX(${DRAWER_W}px)`;
+
+    document.addEventListener('touchstart', (e) => {
+        dragging = false; // always reset — guards against touchcancel leaving it stuck
+        if (!mq.matches) return;
+        if (document.body.classList.contains('menu-open')) return;
+        const x = e.touches[0].clientX;
+        if (!isOpen && x >= window.innerWidth - EDGE_ZONE) {
+            dragging = true;
+            startX   = x;
+        } else if (isOpen && !e.target.closest('.timeline-card')) {
+            dragging = true;
+            startX   = x;
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!dragging || !mq.matches) return;
+        const dx     = e.touches[0].clientX - startX;
+        const offset = isOpen
+            ? Math.max(0, Math.min(DRAWER_W, dx))
+            : Math.max(0, Math.min(DRAWER_W, DRAWER_W + dx));
+        timeline.style.transition = 'none';
+        timeline.style.transform  = `translateX(${offset}px)`;
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+        if (!dragging || !mq.matches) return;
+        dragging     = false;
+        const dx     = e.changedTouches[0].clientX - startX;
+        const shouldOpen = isOpen ? dx < SNAP_THRESHOLD : dx < -SNAP_THRESHOLD;
+        setOpen(shouldOpen);
+    }, { passive: true });
+
+    document.addEventListener('touchcancel', () => {
+        if (!dragging) return;
+        dragging = false;
+        // Snap back to whichever state we were in before the gesture
+        timeline.style.transition = 'transform 0.25s ease';
+        timeline.style.transform  = isOpen ? 'translateX(0)' : `translateX(${DRAWER_W}px)`;
+    }, { passive: true });
+
+    backdrop.addEventListener('click', () => setOpen(false));
 }
 
 // ── User CSS injection ─────────────────────────────────────────────────────

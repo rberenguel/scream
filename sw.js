@@ -1,6 +1,6 @@
 // CACHE_FILES: generated with get_cache.go — run `go run get_cache.go` to regenerate.
 // codemirror-bundle.js added manually (importmap, not reachable via import graph).
-const CACHE_NAME = "scream-v0.2.0";
+const CACHE_NAME = "scream-v0.3.0";
 const CACHE_FILES = [
   './css/app.css',
   './fonts/OstrichSans-Heavy.otf',

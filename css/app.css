@@ -696,3 +696,131 @@ body.light-theme #slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .help-close:hover { opacity: 1; color: var(--text); }
+
+/* ── Mobile layout ────────────────────────────────────────────────────────── */
+
+#menu-pane {
+    display: none; /* desktop: hidden; mobile media query enables it */
+}
+
+#menu-backdrop, #timeline-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 44;
+    background: rgba(0,0,0,0.4);
+}
+
+#menu-backdrop  { right: auto; left: 0; } /* base; overridden when open */
+
+@media (max-width: 900px) {
+    /* ── Left menu drawer ── */
+
+    #menu-pane {
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        top: var(--tab-h);
+        left: 0;
+        bottom: var(--status-h);
+        width: 220px;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        z-index: 45;
+        background: var(--bg2);
+        border-right: 1px solid var(--border);
+        box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+        overflow-y: auto;
+    }
+
+    body.menu-open #menu-backdrop {
+        display: block;
+        left: 220px; /* only cover the non-menu area */
+    }
+
+    #menu-header {
+        padding: 1rem 1.25rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+
+    .menu-logo {
+        font-family: 'OstrichSans', sans-serif;
+        font-weight: 900;
+        font-size: 1.4rem;
+        letter-spacing: 0.2em;
+        color: var(--slide-text);
+    }
+
+    .menu-action {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        padding: 0.9rem 1.25rem;
+        border: none;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        font-size: 0.95rem;
+        text-align: left;
+        cursor: pointer;
+        width: 100%;
+        transition: background 0.1s;
+        flex-shrink: 0;
+    }
+
+    .menu-action:active { background: var(--bg3); }
+
+    .menu-action .ph-light {
+        font-size: 1.15rem;
+        color: var(--muted);
+        flex-shrink: 0;
+    }
+
+    .menu-divider {
+        flex: 1; /* push items below to the bottom */
+    }
+    /* ── Right timeline drawer ── */
+
+    #app { grid-template-columns: 1fr; }
+
+    #editor-pane { border-right: none; }
+
+    #timeline-pane {
+        display: flex;
+        position: fixed;
+        top: var(--tab-h);
+        right: 0;
+        bottom: var(--status-h);
+        width: 200px;
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
+        z-index: 45;
+        border-right: none;
+        border-left: 1px solid var(--border);
+        box-shadow: -4px 0 20px rgba(0,0,0,0.5);
+    }
+
+    body.timeline-open #timeline-backdrop { display: block; right: 200px; }
+
+    /* ── Floating preview (top-right) ── */
+
+    #preview-pane {
+        position: fixed;
+        top: calc(var(--tab-h) + 6px);
+        right: 6px;
+        width: min(150px, 35vw);
+        padding: 0;
+        background: transparent;
+        z-index: 40;
+        align-items: unset;
+        justify-content: unset;
+    }
+
+    #slide-preview {
+        width: 100%;
+        max-height: none;
+        opacity: 0.88;
+        box-shadow: 0 3px 14px rgba(0,0,0,0.85);
+    }
+}
