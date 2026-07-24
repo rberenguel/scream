@@ -398,6 +398,7 @@
   /* ── Keyboard ── */
 
   document.addEventListener('keydown', function (ev) {
+    if (!svg.isConnected) return;
     // While editing text let ALL keys reach the contenteditable div unblocked.
     // The div's own keydown handler deals with Escape/Enter.
     if (activeTextObj()) return;

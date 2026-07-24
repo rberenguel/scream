@@ -123,7 +123,7 @@ function buildSlideContentEl(titleHtml) {
     return el;
 }
 
-function buildSlideEl(slide, index, total) {
+export function buildSlideEl(slide, index, total) {
     const titleHtml = expandInlineStyles(expandIcons(marked.parseInline(slide.title || '')));
     const contentEl = buildSlideContentEl(titleHtml);
     return `<div class="slide-wrapper${index === 0 ? ' active' : ''}" data-index="${index}">
@@ -134,12 +134,12 @@ function buildSlideEl(slide, index, total) {
 </div>`;
 }
 
-function buildNotesEl(slide, index) {
+export function buildNotesEl(slide, index) {
     const html = slide.notes ? marked.parse(slide.notes) : '';
     return `<div class="notes-slide${index === 0 ? ' active' : ''}" data-index="${index}">${html}</div>`;
 }
 
-function buildOverviewEl(slides) {
+export function buildOverviewEl(slides) {
     return slides.map((s, i) => {
         const title = s.title || '—';
         return `<div class="ov-card${i === 0 ? ' active' : ''}" data-index="${i}">
@@ -149,64 +149,20 @@ function buildOverviewEl(slides) {
     }).join('\n');
 }
 
+// ── Shared HTML body template ──────────────────────────────────────────────────
 
-/**
- * @param {import('./parser.js').Slide[]} slides
- * @param {string} docTitle  — filename, used as <title> and suggested save name
- */
-export async function exportPresentation(slides, docTitle, { preambleCss = '' } = {}) {
-    if (!slides || slides.length === 0) {
-        alert('No slides to export.');
-        return;
-    }
-
-    const [ostrichHeavy, ostrichMed, phosphorWoff2, phosphorCssText, iconoirWoff2, iconoirCssText, faviconB64, annotatorJs, exportCss, navJs] = await Promise.all([
-        fetchAsBase64('./fonts/OstrichSans-Heavy.otf', 'font/otf'),
-        fetchAsBase64('./fonts/OstrichSans-Medium.otf', 'font/otf'),
-        fetchAsBase64('./fonts/phosphor/Phosphor-Light.woff2', 'font/woff2'),
-        fetch('./fonts/phosphor/phosphor.css').then(r => r.text()),
-        fetchAsBase64('./fonts/iconoir.woff2', 'font/woff2'),
-        fetch('./fonts/iconoir-font.css').then(r => r.text()),
-        fetchAsBase64('./icons/icon-32.png', 'image/png'),
-        fetch('./js/annotator.js').then(r => r.text()),
-        fetch('./css/export.css').then(r => r.text()),
-        fetch('./js/export-nav.js').then(r => r.text()),
-    ]);
-
-    const patchedPhosphor = phosphorCssText.replace(
-        /url\(["']?\.\/Phosphor-Light\.woff2["']?\)/,
-        `url("${phosphorWoff2}")`
-    );
-
-    const patchedIconoir = iconoirCssText.replace(
-        /url\(["']?\.\/iconoir\.woff2["']?\)/,
-        `url("${iconoirWoff2}")`
-    );
-
-    const fontFacesCss = `@font-face {
-  font-family: 'OstrichSans';
-  src: url('${ostrichHeavy}') format('opentype');
-  font-weight: 900;
-}
-@font-face {
-  font-family: 'OstrichSans';
-  src: url('${ostrichMed}') format('opentype');
-  font-weight: 500;
-}`;
-
-    const total       = slides.length;
-    const slidesHtml  = slides.map((s, i) => buildSlideEl(s, i, total)).join('\n');
-    const notesHtml   = slides.map((s, i) => buildNotesEl(s, i)).join('\n');
-    const overviewHtml = buildOverviewEl(slides);
-    const pageTitle   = escapeHtml(docTitle.replace(/\.md$/i, '') || 'Presentation');
-
-    const html = `<!DOCTYPE html>
+function _presentationHtml({ fontFacesCss, patchedPhosphor, patchedIconoir, exportCss,
+    preambleCss, faviconTag, pageTitle, overviewHtml, slidesHtml, notesHtml, total,
+    annotatorJs, navJs, startIndex }) {
+    const startScript = startIndex != null
+        ? `<script>window._startSlide = ${startIndex};</script>\n` : '';
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${pageTitle}</title>
-<link rel="icon" href="${faviconB64}" type="image/png" />
+${faviconTag}
 <style>
 ${fontFacesCss}
 ${patchedPhosphor}
@@ -229,7 +185,7 @@ ${slidesHtml}
 ${notesHtml}
     </div>
   </div>
-  <div id="nav-hint">← → &middot; 1/2/3 scale &middot; O overview &middot; N notes &middot; P presenter &middot; L light &middot; D draw &middot; B black &middot; ? help</div>
+  <div id="nav-hint">← → &middot; 1/2/3 scale &middot; O overview &middot; N notes &middot; P presenter &middot; L light &middot; D draw &middot; B black &middot; ? help${startIndex != null ? ' &middot; Esc exit' : ''}</div>
 
 </div>
 
@@ -299,7 +255,7 @@ ${notesHtml}
   </div>
 </div>
 
-<script>
+${startScript}<script>
 ${navJs}
 </script>
 <script>
@@ -307,6 +263,64 @@ ${annotatorJs}
 </script>
 </body>
 </html>`;
+}
+
+// ── Export to file (base64-embedded fonts, zero external deps) ─────────────────
+
+/**
+ * @param {import('./parser.js').Slide[]} slides
+ * @param {string} docTitle  — filename, used as <title> and suggested save name
+ */
+export async function exportPresentation(slides, docTitle, { preambleCss = '' } = {}) {
+    if (!slides || slides.length === 0) {
+        alert('No slides to export.');
+        return;
+    }
+
+    const [ostrichHeavy, ostrichMed, phosphorWoff2, phosphorCssText, iconoirWoff2, iconoirCssText, faviconB64, annotatorJs, exportCss, navJs] = await Promise.all([
+        fetchAsBase64('./fonts/OstrichSans-Heavy.otf', 'font/otf'),
+        fetchAsBase64('./fonts/OstrichSans-Medium.otf', 'font/otf'),
+        fetchAsBase64('./fonts/phosphor/Phosphor-Light.woff2', 'font/woff2'),
+        fetch('./fonts/phosphor/phosphor.css').then(r => r.text()),
+        fetchAsBase64('./fonts/iconoir.woff2', 'font/woff2'),
+        fetch('./fonts/iconoir-font.css').then(r => r.text()),
+        fetchAsBase64('./icons/icon-32.png', 'image/png'),
+        fetch('./js/annotator.js').then(r => r.text()),
+        fetch('./css/export.css').then(r => r.text()),
+        fetch('./js/export-nav.js').then(r => r.text()),
+    ]);
+
+    const patchedPhosphor = phosphorCssText.replace(
+        /url\(["']?\.\/Phosphor-Light\.woff2["']?\)/,
+        `url("${phosphorWoff2}")`
+    );
+    const patchedIconoir = iconoirCssText.replace(
+        /url\(["']?\.\/iconoir\.woff2["']?\)/,
+        `url("${iconoirWoff2}")`
+    );
+    const fontFacesCss = `@font-face {
+  font-family: 'OstrichSans';
+  src: url('${ostrichHeavy}') format('opentype');
+  font-weight: 900;
+}
+@font-face {
+  font-family: 'OstrichSans';
+  src: url('${ostrichMed}') format('opentype');
+  font-weight: 500;
+}`;
+
+    const total        = slides.length;
+    const slidesHtml   = slides.map((s, i) => buildSlideEl(s, i, total)).join('\n');
+    const notesHtml    = slides.map((s, i) => buildNotesEl(s, i)).join('\n');
+    const overviewHtml = buildOverviewEl(slides);
+    const pageTitle    = escapeHtml(docTitle.replace(/\.md$/i, '') || 'Presentation');
+
+    const html = _presentationHtml({
+        fontFacesCss, patchedPhosphor, patchedIconoir, exportCss, preambleCss,
+        faviconTag: `<link rel="icon" href="${faviconB64}" type="image/png" />`,
+        pageTitle, overviewHtml, slidesHtml, notesHtml, total, annotatorJs, navJs,
+        startIndex: null,
+    });
 
     const suggestedName = (docTitle.replace(/\.md$/i, '') || 'presentation') + '.html';
 
@@ -339,3 +353,49 @@ ${annotatorJs}
         }
     }
 }
+
+// ── Present mode HTML (absolute font URLs — works for window.open, not srcdoc) ─
+
+export async function buildPresentHtml(slides, { preambleCss = '', startIndex = 0 } = {}) {
+    const base = new URL('./', window.location.href).href;
+
+    const [phosphorCssText, iconoirCssText, annotatorJs, exportCss, navJs] = await Promise.all([
+        fetch('./fonts/phosphor/phosphor.css').then(r => r.text()),
+        fetch('./fonts/iconoir-font.css').then(r => r.text()),
+        fetch('./js/annotator.js').then(r => r.text()),
+        fetch('./css/export.css').then(r => r.text()),
+        fetch('./js/export-nav.js').then(r => r.text()),
+    ]);
+
+    const patchedPhosphor = phosphorCssText.replace(
+        /url\(["']?\.\/Phosphor-Light\.woff2["']?\)/,
+        `url("${base}fonts/phosphor/Phosphor-Light.woff2")`
+    );
+    const patchedIconoir = iconoirCssText.replace(
+        /url\(["']?\.\/iconoir\.woff2["']?\)/,
+        `url("${base}fonts/iconoir.woff2")`
+    );
+    const fontFacesCss = `@font-face {
+  font-family: 'OstrichSans';
+  src: url('${base}fonts/OstrichSans-Heavy.otf') format('opentype');
+  font-weight: 900;
+}
+@font-face {
+  font-family: 'OstrichSans';
+  src: url('${base}fonts/OstrichSans-Medium.otf') format('opentype');
+  font-weight: 500;
+}`;
+
+    const total        = slides.length;
+    const slidesHtml   = slides.map((s, i) => buildSlideEl(s, i, total)).join('\n');
+    const notesHtml    = slides.map((s, i) => buildNotesEl(s, i)).join('\n');
+    const overviewHtml = buildOverviewEl(slides);
+
+    return _presentationHtml({
+        fontFacesCss, patchedPhosphor, patchedIconoir, exportCss, preambleCss,
+        faviconTag: '', pageTitle: 'Presentation',
+        overviewHtml, slidesHtml, notesHtml, total, annotatorJs, navJs,
+        startIndex,
+    });
+}
+

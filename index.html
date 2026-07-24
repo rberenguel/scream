@@ -10,13 +10,6 @@
     <link rel="stylesheet" href="css/app.css" />
     <link rel="stylesheet" href="fonts/phosphor/phosphor.css" />
     <link rel="stylesheet" href="fonts/iconoir-font.css" />
-    <script type="importmap">
-    {
-        "imports": {
-            "CodeMirrorBundle": "./libs/codemirror-bundle.js"
-        }
-    }
-    </script>
 </head>
 <body>
 
@@ -35,7 +28,7 @@
         </div>
         <div id="preview-pane">
             <div id="slide-preview">
-                <div id="slide-content" class="empty">—</div>
+                <div class="slide-content empty">—</div>
             </div>
         </div>
     </div>
@@ -45,7 +38,7 @@
         <span id="status-slide"></span>
         <span id="status-save"></span>
         <button id="open-btn" class="status-btn" title="Open .md file (Cmd-O)">Open</button>
-        <button id="export-btn" class="status-btn" title="Export as standalone HTML (Cmd-E)">Export HTML</button>
+        <button id="export-btn" class="status-btn" title="Export as standalone HTML">Export HTML</button>
     </div>
 
     <button id="help-btn" title="Help (?)"><i class="ph-light ph-question"></i></button>
@@ -69,7 +62,7 @@
                     <dl>
                         <dt><kbd>⌘S</kbd></dt><dd>save</dd>
                         <dt><kbd>⌘O</kbd> / <kbd>O</kbd></dt><dd>open</dd>
-                        <dt><kbd>⌘E</kbd></dt><dd>export HTML</dd>
+
                         <dt><kbd>⌘T</kbd></dt><dd>new tab</dd>
                         <dt><kbd>⌘W</kbd></dt><dd>close tab</dd>
                     </dl>
@@ -92,7 +85,7 @@
                 <section>
                     <h2>Presentation</h2>
                     <dl>
-                        <dt><kbd>P</kbd></dt><dd>presenter window</dd>
+                        <dt><kbd>P</kbd></dt><dd>present (full-screen)</dd>
                         <dt><kbd>← →</kbd> / <kbd>Space</kbd></dt><dd>navigate</dd>
                         <dt><kbd>O</kbd></dt><dd>overview sidebar</dd>
                         <dt><kbd>N</kbd></dt><dd>notes panel</dd>
@@ -128,6 +121,8 @@
     <div id="menu-backdrop"></div>
 
     <div id="timeline-backdrop"></div>
+
+    <div id="present-overlay" class="hidden"></div>
 
     <script src="libs/marked.min.js"></script>
     <script type="module" src="js/main.js"></script>

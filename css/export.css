@@ -1,6 +1,8 @@
 *, *::before, *::after { box-sizing: border-box; }
 
-:root {
+/* #present-overlay added to each scope selector so the same CSS works when the
+   presentation is injected inline into the editor page (in-page present mode). */
+:root, #present-overlay {
   --slide-bg:         #1a1a1a;
   --slide-text:       #bf616a;
   --bg:               #111;
@@ -46,7 +48,7 @@
   --green:   #859900;
 }
 
-body.light-theme {
+body.light-theme, #present-overlay.light-theme {
   --slide-bg:         #fafafa;
   --bg:               #e4e4e4;
   --text:             #1c1c1c;
@@ -72,7 +74,7 @@ body.light-theme {
   --link:             #3b6fa0;
 }
 
-html, body {
+html, body, #present-overlay {
   margin: 0;
   height: 100vh;
   overflow: hidden;

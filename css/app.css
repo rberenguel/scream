@@ -168,34 +168,89 @@ html, body {
     scrollbar-color: var(--border) transparent;
 }
 
-/* CodeMirror */
-#editor-container .cm-editor {
+/* CodeJar editor */
+.codejar-editor {
     min-height: 100%;
-    background: var(--bg) !important;
-}
-
-#editor-container .cm-scroller {
     padding: 2rem 1.5rem;
+    font-family: monospace;
     font-size: 15px;
+    line-height: 1.4;
+    color: var(--text);
+    background: var(--bg);
+    outline: none;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    caret-color: var(--accent);
+    box-sizing: border-box;
 }
 
-#editor-container .cm-content,
-#editor-container .cm-line {
-    max-width: 600px;
+/* Constrain line width, centred, matching old CM layout */
+#editor-container .codejar-editor {
+    max-width: 640px;
     margin: 0 auto;
 }
 
-#editor-container .cm-editor.cm-focused { outline: none; }
-
-#editor-container .cm-gutters {
-    background: var(--bg) !important;
-    border-right: none !important;
+/* Syntax highlight classes */
+.codejar-editor .md-active-slide {
+    color: #e06c75;
+    font-weight: 700;
+    box-shadow: inset 2px 0 0 var(--accent);
+    background: rgba(91, 127, 222, 0.08);
+    padding-left: 4px;
+    margin-left: -4px;
 }
 
-/* Highlight the active slide's # line in the editor */
-.cm-active-slide-line {
-    background: rgba(91, 127, 222, 0.08) !important;
-    border-left: 2px solid var(--accent);
+.codejar-editor .md-h1         { color: #e06c75; font-weight: 700; }
+.codejar-editor .md-h1-marker  { color: #e5c07b; }
+.codejar-editor .md-h2         { color: #e5c07b; font-weight: 700; }
+.codejar-editor .md-quote { color: #5e81ac; }
+.codejar-editor .md-list  { color: #ebcb8b; }
+
+/* Code fence delimiters and body */
+.codejar-editor .md-fence { color: #4ec9b0; }
+
+.codejar-editor .md-fence-body,
+.codejar-editor .md-fence-css {
+    border-left: 2px solid var(--border);
+    padding-left: 0.75rem;
+    margin-left: -0.75rem;
+}
+.codejar-editor .md-fence-body { color: #9cdcfe; }
+.codejar-editor .md-fence-css  { color: #ce9178; }
+
+/* Icon autocomplete dropdown */
+.ac-dropdown {
+    position: fixed;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.55);
+    font-family: monospace;
+    font-size: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    min-width: 200px;
+    display: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+.ac-dropdown::-webkit-scrollbar       { width: 4px; }
+.ac-dropdown::-webkit-scrollbar-track { background: transparent; }
+.ac-dropdown::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.ac-item {
+    padding: 0.28rem 0.65rem;
+    cursor: pointer;
+    color: var(--text);
+}
+
+.ac-item:hover,
+.ac-item.ac-sel {
+    background: var(--card-active);
+    color: #fff;
 }
 
 /* ── Timeline pane ────────────────────────────────────────────────────────── */
@@ -327,7 +382,7 @@ html, body {
     position: relative;
 }
 
-#slide-content {
+.slide-content {
     padding: 8% 10%;
     text-align: center;
     width: 100%;
@@ -344,7 +399,7 @@ html, body {
     -webkit-font-smoothing: antialiased;
 }
 
-#slide-content.empty {
+.slide-content.empty {
     font-family: -apple-system, sans-serif;
     font-size: 3cqi;
     font-weight: 400;
@@ -355,17 +410,17 @@ html, body {
 
 /* Inline markdown inside slide titles */
 /* Nord palette: --yellow: #ebcb8b, ostrich dark strong override: #ff7043 */
-#slide-content strong {
+.slide-content strong {
     color: #ff7043;
     font-weight: 900;
 }
 
-#slide-content em {
+.slide-content em {
     color: #ebcb8b;
     font-style: italic;
 }
 
-#slide-content code {
+.slide-content code {
     font-family: 'monoid', monospace;
     font-size: 0.8em;
     color: #b5cea8;
@@ -376,9 +431,9 @@ html, body {
 
 /* Icon sizing inside slides — both Phosphor and Iconoir use font + ::before.
  * text-transform must be none or the uppercase parent breaks the glyph lookup. */
-#slide-content .ph-light,
-#slide-content [class^="iconoirfont-"],
-#slide-content [class*=" iconoirfont-"] {
+.slide-content .ph-light,
+.slide-content [class^="iconoirfont-"],
+.slide-content [class*=" iconoirfont-"] {
     font-size: 1.1em;
     vertical-align: middle;
     line-height: 1;
@@ -401,19 +456,19 @@ html, body {
 
 /* ── Image layout modes ──────────────────────────────────────────────────── */
 
-#slide-content.layout-fill,
-#slide-content.layout-bg,
-#slide-content.layout-split {
+.slide-content.layout-fill,
+.slide-content.layout-bg,
+.slide-content.layout-split {
     height: 100%;
     padding: 0;
 }
 
-#slide-content.layout-fill {
+.slide-content.layout-fill {
     background-size: cover;
     background-position: center;
 }
 
-#slide-content.layout-bg {
+.slide-content.layout-bg {
     background-size: cover;
     background-position: center;
     position: relative;
@@ -460,18 +515,18 @@ body.light-theme .bg-content-wrapper::before {
     z-index: 2;
 }
 
-#slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
+.slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
     text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
 }
-body.light-theme #slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
+body.light-theme .slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
     text-shadow: 0 0 6px rgba(255,255,255,0.7), 0 0 1px rgba(255,255,255,0.5);
 }
 
-#slide-content.layout-split {
+.slide-content.layout-split {
     display: flex;
     flex-direction: row;
 }
-#slide-content.layout-split.split-right {
+.slide-content.layout-split.split-right {
     flex-direction: row-reverse;
 }
 .split-image-pane {
@@ -490,6 +545,16 @@ body.light-theme #slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
     padding: 4cqi;
     box-sizing: border-box;
 }
+
+/* ── Present-mode overlay ────────────────────────────────────────────────── */
+
+#present-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: #111;
+}
+#present-overlay.hidden { display: none; }
 
 /* ── Status bar ───────────────────────────────────────────────────────────── */
 

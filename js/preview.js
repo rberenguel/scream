@@ -6,7 +6,7 @@
  *   - :icon-name: shortcut → Phosphor Light icon (ligature-based)
  */
 
-const contentEl = () => document.getElementById('slide-content');
+const contentEl = () => document.getElementById('slide-preview').firstElementChild;
 const badgeEl   = () => document.getElementById('slide-index-badge');
 
 /**
@@ -24,13 +24,13 @@ const badgeEl   = () => document.getElementById('slide-index-badge');
  * @param {string} html
  * @returns {string}
  */
-function expandInlineStyles(html) {
+export function expandInlineStyles(html) {
     return html.replace(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)\s*\{([^}]*)\}/g, (_, cls, body) =>
         `<span class="${cls}">${body}</span>`
     );
 }
 
-function expandIcons(html) {
+export function expandIcons(html) {
     return html.replace(/:([a-z][a-z0-9-]+):/g, (_, name) => {
         if (name.startsWith('in-')) {
             const cls = `iconoirfont-${name.slice(3)}`;
@@ -52,8 +52,7 @@ export function renderPreview(title, index, total) {
 
     if (!title) {
         const empty = document.createElement('div');
-        empty.id = 'slide-content';
-        empty.className = 'empty';
+        empty.className = 'slide-content empty';
         empty.textContent = '—';
         el.replaceWith(empty);
         _clearBadge();
@@ -61,16 +60,16 @@ export function renderPreview(title, index, total) {
     }
 
     const html = expandInlineStyles(expandIcons(marked.parseInline(title)));
-    el.replaceWith(_buildSlideContentEl(html));
+    el.replaceWith(buildSlideContent(html));
     _setBadge(index, total);
 }
 
-function _buildSlideContentEl(html) {
+export function buildSlideContent(html) {
     const shadow = document.createElement('div');
     shadow.innerHTML = html;
 
     const el = document.createElement('div');
-    el.id = 'slide-content';
+    el.className = 'slide-content';
 
     const allImages = Array.from(shadow.querySelectorAll('img'));
 

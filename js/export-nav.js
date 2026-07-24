@@ -92,6 +92,7 @@
 
   } else {
     channel.onmessage = function (e) {
+      if (wrappers.length && !wrappers[0].isConnected) return;
       var m = e.data;
       if (m.type !== 'cmd') return;
       if      (m.action === 'next')              showSlide(current + 1);
@@ -103,7 +104,11 @@
       }
     };
 
+    document.addEventListener('scream:exit-present', function () { channel.close(); }, { once: true });
+
     document.addEventListener('keydown', function (e) {
+      // Guard for in-page present mode: bail if our slide DOM has been removed.
+      if (wrappers.length && !wrappers[0].isConnected) return;
       if (e.key === 'Escape' && document.body.classList.contains('help-open')) {
         document.body.classList.remove('help-open');
         return;
@@ -112,7 +117,7 @@
         e.preventDefault();
         if (!presenterWin || presenterWin.closed) {
           presenterWin = window.open(
-            window.location.href, CHANNEL,
+            window._presentUrl || window.location.href, CHANNEL,
             'width=1280,height=800,menubar=no,toolbar=no,location=no,status=no'
           );
         } else {
@@ -130,6 +135,8 @@
         document.body.classList.toggle('overview-open');
       } else if (e.key === 'l' || e.key === 'L') {
         document.body.classList.toggle('light-theme');
+        var _po = document.getElementById('present-overlay');
+        if (_po) _po.classList.toggle('light-theme');
         broadcastState();
       } else if (e.key === 'Home') {
         e.preventDefault(); showSlide(0);
@@ -144,11 +151,13 @@
       }
     });
 
-    document.getElementById('help-overlay').addEventListener('click', function (e) {
+    var _helpOverlay = document.querySelector('#present-overlay #help-overlay') || document.getElementById('help-overlay');
+    _helpOverlay.addEventListener('click', function (e) {
       if (!e.target.closest('.help-box')) document.body.classList.remove('help-open');
     });
 
     document.addEventListener('click', function (e) {
+      if (wrappers.length && !wrappers[0].isConnected) return;
       if (document.body.classList.contains('help-open')) return;
       var card = e.target.closest('.ov-card');
       if (card) showSlide(parseInt(card.dataset.index, 10));
@@ -158,6 +167,6 @@
       if (presenterWin && !presenterWin.closed) presenterWin.close();
     });
 
-    showSlide(0);
+    showSlide(typeof window._startSlide === 'number' ? window._startSlide : 0);
   }
 })();

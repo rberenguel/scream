@@ -3,6 +3,7 @@ import { parseSlides, slideAtLine, reorderSlides, parsePreambleCss } from './par
 import { initTimeline, renderTimeline } from './timeline.js';
 import { renderPreview } from './preview.js';
 import { exportPresentation } from './exporter.js';
+import { enterPresent, exitPresent, isPresentActive } from './present.js';
 
 // ── Tab state ──────────────────────────────────────────────────────────────
 
@@ -402,6 +403,8 @@ function handleTimelineSelect(index) {
 // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
 function handleGlobalKey(e) {
+    if (isPresentActive()) return;
+
     const inInput = ['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable;
     if (inInput) return;
 
@@ -411,6 +414,11 @@ function handleGlobalKey(e) {
         return;
     }
 
+    if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        if (slides.length) enterPresent(slides, Math.max(0, activeIndex), parsePreambleCss(getDoc()));
+        return;
+    }
     if (e.key === 'o') { e.preventDefault(); handleOpen(); }
     if (e.key === '?') { e.preventDefault(); toggleHelp(); }
     if (e.key === 'Escape') { toggleHelp(false); }

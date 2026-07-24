@@ -1,155 +1,287 @@
-import {
-    EditorState, EditorView, keymap,
-    defaultKeymap, history, historyKeymap,
-    markdown, oneDark, languages, markdownLanguage, GFM,
-    StateField, Decoration, RangeSetBuilder,
-    autocompletion, completionKeymap,
-} from "CodeMirrorBundle";
-
+import { CodeJar } from '../libs/codejar.js';
+import { cursorPosition } from '../libs/codejar-cursor.js';
 import { parseSlides, slideAtLine } from './parser.js';
 import { PHOSPHOR_ICONS } from './phosphor-icons.js';
 import { ICONOIR_ICONS } from './iconoir-icons.js';
 
-/** @type {EditorView|null} */
-let editorView = null;
+/** @type {ReturnType<typeof CodeJar>|null} */
+let jar = null;
 
-// ── Active-slide line highlight ────────────────────────────────────────────
+/** @type {HTMLElement|null} */
+let editorEl = null;
 
-const highlightField = StateField.define({
-    create: () => Decoration.none,
-    update(deco, tr) {
-        if (!tr.docChanged && !tr.selectionSet) return deco;
-        const cursorLine = tr.state.doc.lineAt(tr.state.selection.main.head).number - 1;
-        const slides = parseSlides(tr.state.doc.toString());
+// ── Syntax highlighting ─────────────────────────────────────────────────────
+
+function escHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function highlight(editor, pos) {
+    const text = editor.textContent;
+
+    let activeHeadingLine = -1;
+    if (pos != null) {
+        const cursorLine = text.slice(0, pos.start).split('\n').length - 1;
+        const slides = parseSlides(text);
         const idx = slideAtLine(slides, cursorLine);
-        if (idx < 0 || idx >= slides.length) return Decoration.none;
+        if (idx >= 0) activeHeadingLine = slides[idx].startLine;
+    }
 
-        const builder = new RangeSetBuilder();
-        try {
-            const line = tr.state.doc.line(slides[idx].startLine + 1);
-            builder.add(line.from, line.from, Decoration.line({ class: 'cm-active-slide-line' }));
-        } catch { /* line out of range */ }
-        return builder.finish();
-    },
-    provide: f => EditorView.decorations.from(f),
-});
+    let inFence = false;
+    let fenceLang = '';
 
-// ── Icon autocompletion ────────────────────────────────────────────────────
-// Triggers after : followed by at least one letter, completes :icon-name:
+    editor.innerHTML = text.split('\n').map((line, i) => {
+        const esc = escHtml(line);
 
-/** @param {import("CodeMirrorBundle").CompletionContext} ctx */
-function iconCompletionSource(ctx) {
-    const match = ctx.matchBefore(/:(ph|in)-[a-z0-9-]*/);
-    if (!match) return null;
-    const m = match.text.match(/^:(ph|in)-(.*)$/);
-    if (!m) return null;
-    const [, prefix, partial] = m;
-    const icons = prefix === 'ph' ? PHOSPHOR_ICONS : ICONOIR_ICONS;
-    return {
-        from: match.from,
-        options: icons
-            .filter(n => n.startsWith(partial))
-            .map(n => ({ label: `:${prefix}-${n}:`, type: 'keyword', detail: prefix === 'ph' ? 'phosphor' : 'iconoir' })),
-        validFor: /^:(ph|in)-[a-z0-9-]*:?$/,
-    };
+        if (line.startsWith('```')) {
+            inFence = !inFence;
+            fenceLang = inFence ? line.slice(3).trim().toLowerCase() : '';
+            return `<span class="md-fence">${esc}</span>`;
+        }
+        if (inFence) {
+            return `<span class="${fenceLang === 'css' ? 'md-fence-css' : 'md-fence-body'}">${esc}</span>`;
+        }
+
+        if (i === activeHeadingLine) {
+            const m = line.match(/^(#+\s?)(.*)/);
+            if (m) return `<span class="md-active-slide"><span class="md-h1-marker">${escHtml(m[1])}</span>${escHtml(m[2])}</span>`;
+            return `<span class="md-active-slide">${esc}</span>`;
+        }
+        if (line.startsWith('# ') || line === '#') {
+            const m = line.match(/^(#\s?)(.*)/);
+            return `<span class="md-h1"><span class="md-h1-marker">${escHtml(m[1])}</span>${escHtml(m[2])}</span>`;
+        }
+        if (line.startsWith('#')) {
+            const m = line.match(/^(#+\s?)(.*)/);
+            return `<span class="md-h2"><span class="md-h1-marker">${escHtml(m[1])}</span>${escHtml(m[2])}</span>`;
+        }
+        if (line.startsWith('> '))                 return `<span class="md-quote">${esc}</span>`;
+        if (/^\s*[-*+] /.test(line))               return `<span class="md-list">${esc}</span>`;
+        return esc;
+    }).join('\n');
 }
 
-// ── Enter: new slide on # lines ────────────────────────────────────────────
+// ── Text-before-cursor helper ───────────────────────────────────────────────
 
-function enterOnSlideHeader(view) {
-    const state = view.state;
-    const sel = state.selection.main;
-    const line = state.doc.lineAt(sel.head);
-    if (!line.text.startsWith('# ')) return false;
-    // Insert blank line + new header, cursor after '# '
-    const insert = '\n\n# ';
-    view.dispatch({
-        changes: { from: line.to, insert },
-        selection: { anchor: line.to + insert.length },
-        scrollIntoView: true,
-    });
-    return true;
-}
-
-// ── Setup ──────────────────────────────────────────────────────────────────
-
-/**
- * @param {HTMLElement} container
- * @param {string} initialDoc
- * @param {{ onUpdate: (doc: string, cursorLine: number) => void, onSave: () => void, onOpen: () => void, onExport: () => void }} callbacks
- */
-export function setupEditor(container, initialDoc, { onUpdate, onSave, onOpen, onExport, onNewTab, onCloseTab }) {
-    const screamKeymap = keymap.of([
-        { key: 'Mod-s', run: () => { onSave?.(); return true; } },
-        { key: 'Mod-o', run: () => { onOpen?.(); return true; } },
-        { key: 'Mod-e', run: () => { onExport?.(); return true; } },
-        { key: 'Mod-t', run: () => { onNewTab?.(); return true; } },
-        { key: 'Mod-w', run: () => { onCloseTab?.(); return true; } },
-        { key: 'Enter', run: enterOnSlideHeader },
-        { key: 'Tab', run: (view) => { view.dispatch(view.state.replaceSelection('\t')); return true; } },
-        ...defaultKeymap,
-        ...historyKeymap,
-        ...completionKeymap,
-    ]);
-
-    const state = EditorState.create({
-        doc: initialDoc,
-        extensions: [
-            history(),
-            screamKeymap,
-            markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [GFM] }),
-            oneDark,
-            EditorView.lineWrapping,
-            highlightField,
-            autocompletion({ override: [iconCompletionSource] }),
-            EditorView.updateListener.of((update) => {
-                if (!update.docChanged && !update.selectionSet) return;
-                const doc = update.state.doc;
-                const cursorLine = doc.lineAt(update.state.selection.main.head).number - 1;
-                onUpdate(doc.toString(), cursorLine);
-            }),
-        ],
-    });
-
-    editorView = new EditorView({ state, parent: container });
-    return editorView;
-}
-
-export function getEditorView() { return editorView; }
-
-/** @param {string} text */
-export function setDoc(text) {
-    if (!editorView) return;
-    editorView.dispatch({
-        changes: { from: 0, to: editorView.state.doc.length, insert: text },
-    });
-}
-
-/** Place cursor at end of document and focus. */
-export function placeCursorAtEnd() {
-    if (!editorView) return;
-    const end = editorView.state.doc.length;
-    editorView.dispatch({ selection: { anchor: end } });
-    editorView.focus();
-}
-
-/** @returns {string} */
-export function getDoc() {
-    return editorView?.state.doc.toString() ?? '';
-}
-
-/**
- * Move cursor to a 0-based line number and scroll it into view.
- * @param {number} lineNum
- */
-export function goToLine(lineNum) {
-    if (!editorView) return;
+function _textBeforeCursor() {
+    if (!editorEl) return '';
     try {
-        const line = editorView.state.doc.line(lineNum + 1);
-        editorView.dispatch({
-            selection: { anchor: line.from },
-            effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 48 }),
-        });
-        editorView.focus();
-    } catch { /* line out of range */ }
+        const s = editorEl.getRootNode().getSelection();
+        if (!s || s.rangeCount === 0) return '';
+        const r = document.createRange();
+        r.selectNodeContents(editorEl);
+        r.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset);
+        return r.toString();
+    } catch { return ''; }
+}
+
+// ── Icon autocomplete ───────────────────────────────────────────────────────
+
+let _acDropdown = null;
+let _acItems    = [];
+let _acIndex    = -1;
+let _acPrefix   = '';
+let _acFrom     = 0;
+
+function _getMatch(before) {
+    const m = before.match(/:(ph|in)-([a-z0-9-]*)$/);
+    if (!m) return null;
+    const [full, prefix, partial] = m;
+    const icons = prefix === 'ph' ? PHOSPHOR_ICONS : ICONOIR_ICONS;
+    const matches = icons.filter(n => n.startsWith(partial)).slice(0, 12);
+    return matches.length ? { prefix, matches, from: before.length - full.length } : null;
+}
+
+function _checkAutocomplete() {
+    const match = _getMatch(_textBeforeCursor());
+    if (!match) { _hideAc(); return; }
+    _showAc(match);
+}
+
+function _showAc({ prefix, matches, from }) {
+    if (!_acDropdown) {
+        _acDropdown = document.createElement('div');
+        _acDropdown.className = 'ac-dropdown';
+        document.body.appendChild(_acDropdown);
+    }
+    _acItems  = matches;
+    _acIndex  = 0;
+    _acPrefix = prefix;
+    _acFrom   = from;
+
+    _acDropdown.innerHTML = '';
+    matches.forEach((name, i) => {
+        const el = document.createElement('div');
+        el.className = 'ac-item' + (i === 0 ? ' ac-sel' : '');
+        el.textContent = `:${prefix}-${name}:`;
+        el.addEventListener('mousedown', e => { e.preventDefault(); _applyAc(prefix, name); });
+        _acDropdown.appendChild(el);
+    });
+
+    const pos = cursorPosition();
+    if (pos) { _acDropdown.style.top = pos.top; _acDropdown.style.left = pos.left; }
+    _acDropdown.style.display = 'block';
+}
+
+function _hideAc() {
+    if (_acDropdown) _acDropdown.style.display = 'none';
+    _acItems = []; _acIndex = -1;
+}
+
+function _acVisible() {
+    return _acDropdown && _acDropdown.style.display !== 'none' && _acItems.length > 0;
+}
+
+function _acMoveSel(delta) {
+    _acIndex = Math.max(0, Math.min(_acItems.length - 1, _acIndex + delta));
+    Array.from(_acDropdown.children).forEach((el, i) =>
+        el.classList.toggle('ac-sel', i === _acIndex));
+    _acDropdown.children[_acIndex]?.scrollIntoView({ block: 'nearest' });
+}
+
+function _applyAc(prefix, name) {
+    const insertion = `:${prefix}-${name}:`;
+    try {
+        const curPos = jar.save();
+        jar.restore({ start: _acFrom, end: curPos.start, dir: '->' });
+        document.execCommand('insertText', false, insertion);
+    } catch (e) { console.error('[Scream] autocomplete:', e); }
+    _hideAc();
+    editorEl?.focus();
+}
+
+function _handleAcKey(e) {
+    if (!_acVisible()) return false;
+    if (e.key === 'ArrowDown') { e.preventDefault(); _acMoveSel(+1); return true; }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); _acMoveSel(-1); return true; }
+    if (e.key === 'Escape')    { e.preventDefault(); _hideAc();      return true; }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        if (_acIndex >= 0 && _acItems[_acIndex]) _applyAc(_acPrefix, _acItems[_acIndex]);
+        return true;
+    }
+    return false;
+}
+
+// ── Scroll helper ────────────────────────────────────────────────────────────
+
+function _scrollCursorIntoView() {
+    setTimeout(() => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const rect = sel.getRangeAt(0).getBoundingClientRect();
+        const container = editorEl?.closest('#editor-container');
+        if (!container || !rect.height) return;
+        const cRect = container.getBoundingClientRect();
+        const margin = 80;
+        const relTop = rect.top - cRect.top + container.scrollTop;
+        if (rect.top < cRect.top + margin) {
+            container.scrollTop = relTop - margin;
+        } else if (rect.bottom > cRect.bottom - margin) {
+            container.scrollTop = relTop - (cRect.height - margin);
+        }
+    }, 0);
+}
+
+// ── Public API ──────────────────────────────────────────────────────────────
+
+export function setupEditor(container, initialDoc, { onUpdate, onSave, onOpen, onExport, onNewTab, onCloseTab }) {
+    editorEl = document.createElement('div');
+    editorEl.className = 'codejar-editor';
+    container.appendChild(editorEl);
+
+    // Keydown registered BEFORE CodeJar so event.defaultPrevented suppresses its handlers
+    editorEl.addEventListener('keydown', e => {
+        const mod = e.metaKey || e.ctrlKey;
+        if (mod) {
+            if (e.key === 's') { e.preventDefault(); onSave?.();     return; }
+            if (e.key === 'o') { e.preventDefault(); onOpen?.();     return; }
+            if (e.key === 't') { e.preventDefault(); onNewTab?.();   return; }
+            if (e.key === 'w') { e.preventDefault(); onCloseTab?.(); return; }
+        }
+        if (_handleAcKey(e)) return;
+        if (e.key === 'Enter') {
+            const before = _textBeforeCursor();
+            if (before.split('\n').pop().startsWith('# ')) {
+                e.preventDefault();
+                document.execCommand('insertText', false, '\n\n# ');
+            }
+        }
+    });
+
+    jar = CodeJar(editorEl, highlight, {
+        tab:           '\t',
+        preserveIdent: true,
+        addClosing:    false,
+        catchTab:      true,
+        history:       true,
+    });
+
+    // CodeJar sets overflow-y:auto on the element; let #editor-container scroll instead
+    editorEl.style.overflowY = 'visible';
+
+    // Click anywhere in the editor → navigate to the containing slide
+    editorEl.addEventListener('mouseup', () => {
+        const text = editorEl.textContent;
+        let cursorLine = 0;
+        try {
+            const s = editorEl.getRootNode().getSelection();
+            if (s && s.rangeCount > 0) {
+                const r = document.createRange();
+                r.selectNodeContents(editorEl);
+                r.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset);
+                cursorLine = r.toString().split('\n').length - 1;
+            }
+        } catch {}
+        // Don't navigate when clicking in the preamble (before first slide)
+        const slides = parseSlides(text);
+        if (slides.length > 0 && cursorLine < slides[0].startLine) return;
+        onUpdate(text, cursorLine);
+    });
+
+    jar.onUpdate(text => {
+        let cursorLine = 0;
+        try {
+            const s = editorEl.getRootNode().getSelection();
+            if (s && s.rangeCount > 0) {
+                const r = document.createRange();
+                r.selectNodeContents(editorEl);
+                r.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset);
+                cursorLine = r.toString().split('\n').length - 1;
+            }
+        } catch {}
+        onUpdate(text, cursorLine);
+        _checkAutocomplete();
+    });
+
+    jar.updateCode(initialDoc, false);
+}
+
+export function getEditorView() { return jar; }
+
+export function setDoc(text) {
+    if (!jar) return;
+    jar.updateCode(text, false);
+}
+
+export function getDoc() {
+    return jar?.toString() ?? '';
+}
+
+export function placeCursorAtEnd() {
+    if (!jar || !editorEl) return;
+    const len = editorEl.textContent.length;
+    editorEl.focus();
+    try { jar.restore({ start: len, end: len, dir: '->' }); } catch {}
+}
+
+export function goToLine(lineNum) {
+    if (!jar || !editorEl) return;
+    const lines = editorEl.textContent.split('\n');
+    let offset = 0;
+    for (let i = 0; i < Math.min(lineNum, lines.length); i++) offset += lines[i].length + 1;
+    offset = Math.min(offset, editorEl.textContent.length);
+    editorEl.focus();
+    try { jar.restore({ start: offset, end: offset, dir: '->' }); } catch {}
+    _scrollCursorIntoView();
 }
