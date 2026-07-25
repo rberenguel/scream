@@ -59,7 +59,7 @@ export function renderPreview(title, index, total, hideNumber = false) {
         return;
     }
 
-    const html = expandInlineStyles(expandIcons(marked.parseInline(title)));
+    const html = expandInlineStyles(expandIcons(marked.parseInline(title.replace(/\\n/g, '<br>'))));
     el.replaceWith(buildSlideContent(html));
     if (hideNumber) _clearBadge(); else _setBadge(index, total);
 }

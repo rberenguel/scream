@@ -164,7 +164,7 @@ function buildSlideContentEl(titleHtml) {
 }
 
 export function buildSlideEl(slide, index, total) {
-    const titleHtml = expandInlineStyles(expandIcons(marked.parseInline(slide.title || '')));
+    const titleHtml = expandInlineStyles(expandIcons(marked.parseInline((slide.title || '').replace(/\\n/g, '<br>'))));
     const contentEl = buildSlideContentEl(titleHtml);
     const extraClasses = slide.classes?.length ? ' ' + slide.classes.join(' ') : '';
     return `<div class="slide-wrapper${index === 0 ? ' active' : ''}${extraClasses}" data-index="${index}">
