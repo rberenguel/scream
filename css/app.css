@@ -253,6 +253,16 @@ html, body {
     color: #fff;
 }
 
+.ac-item .ac-name {
+    font-weight: 600;
+    margin-right: 0.6em;
+}
+
+.ac-item .ac-desc {
+    opacity: 0.55;
+    font-size: 0.9em;
+}
+
 /* ── Timeline pane ────────────────────────────────────────────────────────── */
 
 #timeline-pane {
@@ -410,6 +420,9 @@ html, body {
 
 /* Inline markdown inside slide titles */
 /* Nord palette: --yellow: #ebcb8b, ostrich dark strong override: #ff7043 */
+/* SYNC: any .slide-content rule here must also exist in css/export.css */
+.slide-content a, .slide-content .a { color: #060; }
+
 .slide-content strong {
     color: #ff7043;
     font-weight: 900;
@@ -662,6 +675,22 @@ body.light-theme .slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
     box-shadow: 0 20px 60px rgba(0,0,0,0.7);
 }
 
+.help-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.help-logo {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    border-radius: 10px;
+}
+
+.help-header > div { flex: 1; }
+
 #help-box h1 {
     margin: 0 0 0.2rem;
     font-family: 'OstrichSans', sans-serif;
@@ -681,7 +710,7 @@ body.light-theme .slide-content.layout-bg :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .help-tagline {
-    margin: 0 0 1.5rem;
+    margin: 0;
     color: var(--muted);
     font-size: 0.95rem;
 }

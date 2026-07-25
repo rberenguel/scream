@@ -223,44 +223,55 @@ After all phases:
 |---------|-------------|--------|
 | **A** | PLAN.md written, codebase understood | ✅ done |
 | **B** | Phase 1: `editor.js` rewritten for CodeJar, PWA works without CodeMirror | ✅ done |
-| **C** | Phase 4 (partial): present-mode overlay in `index.html`; `export-nav.js` refactored into shared `PresentMode` | ⚠️ partial |
-| **D** | Phase 5: font-baking shim in `exporter.js` | — |
-| **E** | Phase 2 + 3: `weave.go` written (`go run weave.go`), produces working `dist/scream.html` | — |
-| **F** | Phase 6: SW cache update, version bump, end-to-end test | — |
+| **C** | Phase 4 (partial): present-mode overlay in `index.html`; CSS scoping; wiring in `main.js` | ✅ done |
+| **D** | Phase 4 (complete): `present.js` implemented; all present-mode keys working | ✅ done |
+| **E** | Phase 5: font-baking shim in `exporter.js` for `file://` context | ✅ done |
+| **F** | Phase 2 + 3: `weave.go` written (`go run weave.go`), produces working `dist/scream.html` | ✅ done |
+| **G** | Phase 6: SW cache update, version bump, end-to-end test | — |
 
-Sessions B–F are independent enough to be done in any order except E depends on
-B (CodeMirror must be gone before bundling is simple).
+## Sessions E + F — completed changes
 
-## Session C — completed changes
+### Session E — Font-baking shim
 
-### What was done correctly
+- `js/exporter.js` — added `_loadExportAssets()`: checks `window.SCREAM_ASSETS` first, falls back to `fetch()` for PWA; refactored `exportPresentation` and `buildPresentHtml` to use it
+- `js/present.js` — `enterPresent` uses `SCREAM_ASSETS`-guarded ternaries instead of direct `fetch()` calls for `export.css`, `export-nav.js`, `annotator.js`
+- `window.SCREAM_ASSETS` contract: `{ ostrichHeavy, ostrichMed, phosphorWoff2, phosphorCss, iconoirWoff2, iconoirCss, faviconB64, annotatorJs, exportCss, navJs }` — fonts as data URIs, CSS/JS as raw text
 
-- `js/preview.js` — exported `expandIcons`, `expandInlineStyles`, `buildSlideContent`; element now uses `class="slide-content"` instead of `id="slide-content"`; `contentEl()` uses `firstElementChild` of `#slide-preview`
-- `css/app.css` — all `#slide-content` selectors renamed to `.slide-content`
-- `index.html` — initial empty slide div uses `class="slide-content empty"` (no id); `#present-overlay` div added; help text updated
-- `css/export.css` — `#present-overlay` added to `:root`, `html, body`, and `body.light-theme` selectors (with comment) so the same CSS works for both standalone export and in-page present mode
-- `js/exporter.js` — `buildSlideEl`, `buildNotesEl`, `buildOverviewEl` exported; private `_presentationHtml` helper extracted so both `exportPresentation` and future present-mode code share the same HTML template
-- `js/export-nav.js` — `isConnected` guard added to audience keydown handler so stale listeners from previous present-mode runs are no-ops; `showSlide(window._startSlide ?? 0)` so present mode opens at the current slide
-- `js/main.js` — imports `enterPresent`, `exitPresent`, `isPresentActive` from `present.js`; `P` key enters present mode; `handleGlobalKey` guards against present mode being active
-- `js/present.js` — stub created (session D must implement it)
-- `sw.js` — `present.js` added to cache
+### Session F — `weave.go`
 
-### What remains for Session D (present mode)
+- `weave.go` — new file at project root; `go run weave.go [--out path]`, default `dist/scream.html`; inlines CSS (base64 font URLs), marked.min.js, SCREAM_ASSETS block, IIFE bundle from ES module graph
+- Bug fixed: `ReplaceAllString` was treating `${varName}` in the IIFE as regexp capture group references, silently erasing all template literal interpolations; fixed with `ReplaceAllLiteralString`
+- Bug fixed: `</script>` inside `exporter.js` template literals closed the IIFE block early; fixed with `strings.ReplaceAll(iife, "</script>", "<\/script>")` + restore final tag
 
-`js/present.js` must implement `enterPresent(slides, startIndex, preambleCss)`, `exitPresent()`, `isPresentActive()`.
+### Sessions E+F — `export-nav.js` overhaul
 
-**Approach:**
-1. Fetch `css/export.css`, `js/export-nav.js`, `js/annotator.js`
-2. Build the same DOM structure as the exported HTML (using the already-exported `buildSlideEl`, `buildNotesEl`, `buildOverviewEl`) and inject it into `#present-overlay`
-3. Inject export.css as a `<style>` element (removed on exit)
-4. Set `window._startSlide = startIndex`, inject export-nav.js + annotator.js as a single `<script>` (removed on exit; stale listeners are harmless thanks to the `isConnected` guard)
-5. On exit: hide overlay, clear innerHTML, remove style and script elements, delete `window._startSlide`
+- `js/export-nav.js` — replaced BroadcastChannel-only IPC with dual-transport: `sendToPresenter` tries `presenterWin.postMessage('*')` first (works cross-origin), `sendToAudience` tries `window.opener.postMessage('*')` first; BroadcastChannel kept as fallback for same-origin cases
+- Root cause: `blob:null` origin (presenter window) ≠ `file://` unique origin (editor window) → BroadcastChannel messages never arrived; `window.postMessage` has no origin restriction with `'*'`
+- Both sides now listen on both transports (`channel.onmessage` + `window.addEventListener('message', …)`); only one fires per message since `sendTo*` helpers use one or the other
 
-**Remaining problem: the `P` key (presenter window) inside in-page present mode.**
-- export-nav.js does `window.open(window.location.href, CHANNEL, ...)` — in in-page mode this opens the editor, not the presentation
-- Fix: set `window._presentUrl` to a blob URL of the full export HTML before entering present mode; in export-nav.js use `window._presentUrl || window.location.href` for the presenter window URL
-- The blob URL works for `window.open` (unlike srcdoc); the new window loads the export HTML, sees `window.name === CHANNEL`, enters presenter view; BroadcastChannel syncs normally
-- Clean up: revoke and delete `window._presentUrl` on exit
+---
+
+## Session D — completed changes
+
+### What was implemented
+
+- `js/present.js` — full implementation of `enterPresent`, `exitPresent`, `isPresentActive`:
+  - Fetches `export.css`, `export-nav.js`, `annotator.js` and builds presenter window HTML in parallel
+  - Injects `export.css` into `<head>` as `#present-export-css` (cleanly removed on exit); adds `body.help-open > #help-overlay { display: none !important }` to suppress the editor's help overlay
+  - Builds slide/notes/overview HTML via `buildSlideEl`/`buildNotesEl`/`buildOverviewEl` and injects into `#present-overlay` along with presenter `#help-overlay` content, `#anno-svg`, `#blackout`, `#draw-indicator`
+  - Sets `window._startSlide = startIndex` and `window._presentUrl` (blob URL of full standalone HTML with absolute font paths) before injecting scripts
+  - Registers Escape handler in **capture phase before script injection** so it fires before annotator (which also uses capture); skips if `help-open` or `draw-mode` is active
+  - `exitPresent`: dispatches `scream:exit-present`, removes style tag, clears overlay innerHTML, resets `overlay.className = 'hidden'`, restores `document.body.className`, revokes blob URL
+
+- `js/export-nav.js` — four additions to the audience branch:
+  - `window._presentUrl || window.location.href` for the P-key presenter window open
+  - `isConnected` guard on `channel.onmessage` (was missing; stale handlers caused blank-slide bug on re-entry)
+  - `isConnected` guard on document click handler (same reason)
+  - `document.addEventListener('scream:exit-present', () => channel.close(), { once: true })` — closes stale BroadcastChannels on exit
+  - `#present-overlay.light-theme` toggled alongside `body.light-theme` for L key (CSS variables anchored on the overlay element need the class there too)
+  - `querySelector('#present-overlay #help-overlay') || getElementById('help-overlay')` so the presenter help overlay (injected inside `#present-overlay`) is used for click-outside-to-close
+
+- `js/annotator.js` — `if (!svg.isConnected) return` added at top of document keydown handler (capture phase); without this, stale annotator instances double-toggled `draw-mode` on re-entry making D key appear broken
 
 ---
 

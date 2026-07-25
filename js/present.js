@@ -55,10 +55,11 @@ export async function enterPresent(slides, startIndex, preambleCss) {
     const overlay = document.getElementById('present-overlay');
     const total = slides.length;
 
+    const A = window.SCREAM_ASSETS;
     const [exportCss, navJs, annotatorJs, presentHtml] = await Promise.all([
-        fetch('./css/export.css').then(r => r.text()),
-        fetch('./js/export-nav.js').then(r => r.text()),
-        fetch('./js/annotator.js').then(r => r.text()),
+        A ? Promise.resolve(A.exportCss)   : fetch('./css/export.css').then(r => r.text()),
+        A ? Promise.resolve(A.navJs)       : fetch('./js/export-nav.js').then(r => r.text()),
+        A ? Promise.resolve(A.annotatorJs) : fetch('./js/annotator.js').then(r => r.text()),
         buildPresentHtml(slides, { preambleCss, startIndex }),
     ]);
 

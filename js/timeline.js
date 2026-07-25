@@ -52,7 +52,7 @@ export function renderTimeline(container, slides, activeIndex) {
 
         const titleEl = document.createElement('span');
         titleEl.className = 'card-title';
-        titleEl.textContent = slide.title || '(untitled)';
+        titleEl.textContent = slide.cleanTitle || slide.title || '(untitled)';
 
         card.appendChild(numEl);
         card.appendChild(titleEl);

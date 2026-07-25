@@ -10,12 +10,28 @@
   var ovCards    = Array.from(document.querySelectorAll('.ov-card'));
   var total = wrappers.length;
 
+  // Send to presenter: prefer direct postMessage (works cross-origin), fall back to BroadcastChannel.
+  function sendToPresenter(msg) {
+    if (presenterWin && !presenterWin.closed) {
+      try { presenterWin.postMessage(msg, '*'); return; } catch (e) {}
+    }
+    channel.postMessage(msg);
+  }
+
+  // Send to audience: prefer opener.postMessage (works cross-origin), fall back to BroadcastChannel.
+  function sendToAudience(msg) {
+    if (window.opener) {
+      try { window.opener.postMessage(msg, '*'); return; } catch (e) {}
+    }
+    channel.postMessage(msg);
+  }
+
   /* ── shared ── */
 
   function broadcastState() {
     if (isPresenter || !presenterWin || presenterWin.closed) return;
     var next = Math.min(current + 1, total - 1);
-    channel.postMessage({
+    sendToPresenter({
       type: 'state-update',
       idx: current,
       total: total,
@@ -54,55 +70,61 @@
     var elCount  = document.getElementById('pv-counter');
 
     document.getElementById('pv-prev-btn').onclick = function () {
-      channel.postMessage({ type: 'cmd', action: 'prev' });
+      sendToAudience({ type: 'cmd', action: 'prev' });
     };
     document.getElementById('pv-next-btn').onclick = function () {
-      channel.postMessage({ type: 'cmd', action: 'next' });
+      sendToAudience({ type: 'cmd', action: 'next' });
     };
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'PageDown') {
         e.preventDefault();
-        channel.postMessage({ type: 'cmd', action: 'next' });
+        sendToAudience({ type: 'cmd', action: 'next' });
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
-        channel.postMessage({ type: 'cmd', action: 'prev' });
+        sendToAudience({ type: 'cmd', action: 'prev' });
       }
     });
 
-    channel.onmessage = function (e) {
-      var m = e.data;
+    function handleStateUpdate(m) {
       if (m.type !== 'state-update') return;
       elCur.innerHTML   = m.cur;
       elNxt.innerHTML   = m.nxt;
       elNotes.innerHTML = m.notes || '<span class="pv-notes-empty">No notes</span>';
       if (elCount) elCount.textContent = (m.idx + 1) + ' / ' + m.total;
       document.body.classList.toggle('light-theme', !!m.light);
-    };
+    }
+
+    // Listen on both transports — only one fires depending on how audience sent.
+    channel.onmessage = function (e) { handleStateUpdate(e.data); };
+    window.addEventListener('message', function (e) { handleStateUpdate(e.data); });
 
     window.addEventListener('beforeunload', function () {
-      channel.postMessage({ type: 'cmd', action: 'presenter-closing' });
+      sendToAudience({ type: 'cmd', action: 'presenter-closing' });
     });
 
     setTimeout(function () {
-      channel.postMessage({ type: 'cmd', action: 'presenter-ready' });
+      sendToAudience({ type: 'cmd', action: 'presenter-ready' });
     }, 150);
 
   /* ── audience window ── */
 
   } else {
-    channel.onmessage = function (e) {
+    function handleCmd(m) {
       if (wrappers.length && !wrappers[0].isConnected) return;
-      var m = e.data;
       if (m.type !== 'cmd') return;
       if      (m.action === 'next')              showSlide(current + 1);
       else if (m.action === 'prev')              showSlide(current - 1);
       else if (m.action === 'presenter-closing') presenterWin = null;
       else if (m.action === 'presenter-ready') {
-        presenterWin = window.open('', CHANNEL);
+        if (!presenterWin || presenterWin.closed) presenterWin = window.open('', CHANNEL);
         broadcastState();
       }
-    };
+    }
+
+    // Listen on both transports — only one fires depending on how presenter sent.
+    channel.onmessage = function (e) { handleCmd(e.data); };
+    window.addEventListener('message', function (e) { handleCmd(e.data); });
 
     document.addEventListener('scream:exit-present', function () { channel.close(); }, { once: true });
 

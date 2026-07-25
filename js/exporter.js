@@ -22,6 +22,43 @@ async function fetchAsBase64(url, mimeType) {
     });
 }
 
+// Returns all assets needed for a standalone export.
+// When window.SCREAM_ASSETS is present (single-file / file:// context), uses pre-baked
+// values injected by weave.go. Otherwise fetches and base64-encodes fonts at runtime.
+async function _loadExportAssets() {
+    const A = window.SCREAM_ASSETS;
+    if (A) {
+        return {
+            ostrichHeavy: A.ostrichHeavy,
+            ostrichMed:   A.ostrichMed,
+            phosphorWoff2: A.phosphorWoff2,
+            phosphorCssText: A.phosphorCss,
+            iconoirWoff2: A.iconoirWoff2,
+            iconoirCssText: A.iconoirCss,
+            faviconB64: A.faviconB64,
+            annotatorJs: A.annotatorJs,
+            exportCss:  A.exportCss,
+            navJs:       A.navJs,
+        };
+    }
+    const [ostrichHeavy, ostrichMed, phosphorWoff2, phosphorCssText,
+           iconoirWoff2, iconoirCssText, faviconB64, annotatorJs, exportCss, navJs] =
+        await Promise.all([
+            fetchAsBase64('./fonts/OstrichSans-Heavy.otf', 'font/otf'),
+            fetchAsBase64('./fonts/OstrichSans-Medium.otf', 'font/otf'),
+            fetchAsBase64('./fonts/phosphor/Phosphor-Light.woff2', 'font/woff2'),
+            fetch('./fonts/phosphor/phosphor.css').then(r => r.text()),
+            fetchAsBase64('./fonts/iconoir.woff2', 'font/woff2'),
+            fetch('./fonts/iconoir-font.css').then(r => r.text()),
+            fetchAsBase64('./icons/icon-32.png', 'image/png'),
+            fetch('./js/annotator.js').then(r => r.text()),
+            fetch('./css/export.css').then(r => r.text()),
+            fetch('./js/export-nav.js').then(r => r.text()),
+        ]);
+    return { ostrichHeavy, ostrichMed, phosphorWoff2, phosphorCssText,
+             iconoirWoff2, iconoirCssText, faviconB64, annotatorJs, exportCss, navJs };
+}
+
 function escapeHtml(str) {
     return str
         .replace(/&/g, '&amp;')
@@ -83,10 +120,13 @@ function buildSlideContentEl(titleHtml) {
 
         const sliceContainer = document.createElement('div');
         sliceContainer.className = 'bg-slice-container';
+        const extra = bgInfos[0].match[2]?.trim() ?? '';
+        const isBgClass = extra.startsWith('.');
         bgInfos.forEach(info => {
             const slice = document.createElement('div');
             slice.className = 'bg-slice';
-            slice.style.backgroundImage = `url("${info.el.src}")`;
+            if (info.el.src) slice.style.backgroundImage = `url("${info.el.src}")`;
+            if (isBgClass) extra.split(/\s+/).forEach(c => c.startsWith('.') && slice.classList.add(c.slice(1)));
             sliceContainer.appendChild(slice);
             (info.el.closest('p') || info.el).remove();
         });
@@ -94,8 +134,8 @@ function buildSlideContentEl(titleHtml) {
 
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-content-wrapper';
-        const filter = bgInfos[0].match[2]?.trim();
-        if (filter) wrapper.style.setProperty('--custom-bg-filter', filter);
+        if (isBgClass) el.style.setProperty('--custom-bg-filter', 'none');
+        else if (extra) el.style.setProperty('--custom-bg-filter', extra);
         wrapper.append(...shadow.childNodes);
         el.append(sliceContainer, wrapper);
 
@@ -126,7 +166,8 @@ function buildSlideContentEl(titleHtml) {
 export function buildSlideEl(slide, index, total) {
     const titleHtml = expandInlineStyles(expandIcons(marked.parseInline(slide.title || '')));
     const contentEl = buildSlideContentEl(titleHtml);
-    return `<div class="slide-wrapper${index === 0 ? ' active' : ''}" data-index="${index}">
+    const extraClasses = slide.classes?.length ? ' ' + slide.classes.join(' ') : '';
+    return `<div class="slide-wrapper${index === 0 ? ' active' : ''}${extraClasses}" data-index="${index}">
   <div class="slide-preview-box">
     ${contentEl.outerHTML}
     <div class="slide-badge">${index + 1}&thinsp;/&thinsp;${total}</div>
@@ -141,7 +182,7 @@ export function buildNotesEl(slide, index) {
 
 export function buildOverviewEl(slides) {
     return slides.map((s, i) => {
-        const title = s.title || '—';
+        const title = s.cleanTitle || s.title || '—';
         return `<div class="ov-card${i === 0 ? ' active' : ''}" data-index="${i}">
   <span class="ov-num">${i + 1}</span>
   <span class="ov-title">${escapeHtml(title)}</span>
@@ -152,8 +193,9 @@ export function buildOverviewEl(slides) {
 // ── Shared HTML body template ──────────────────────────────────────────────────
 
 function _presentationHtml({ fontFacesCss, patchedPhosphor, patchedIconoir, exportCss,
-    preambleCss, faviconTag, pageTitle, overviewHtml, slidesHtml, notesHtml, total,
+    preambleCss, faviconTag, faviconSrc, pageTitle, overviewHtml, slidesHtml, notesHtml, total,
     annotatorJs, navJs, startIndex }) {
+    const logoHtml = faviconSrc ? `<img src="${faviconSrc}" class="help-logo" alt="">` : '';
     const startScript = startIndex != null
         ? `<script>window._startSlide = ${startIndex};</script>\n` : '';
     return `<!DOCTYPE html>
@@ -195,7 +237,7 @@ ${notesHtml}
 
 <div id="help-overlay">
   <div class="help-box">
-    <h2>Keyboard shortcuts</h2>
+    <div class="help-header">${logoHtml}<h2>Keyboard shortcuts</h2></div>
     <div class="help-section">
       <div class="help-section-title">Navigation</div>
       <div class="help-grid">
@@ -277,18 +319,9 @@ export async function exportPresentation(slides, docTitle, { preambleCss = '' } 
         return;
     }
 
-    const [ostrichHeavy, ostrichMed, phosphorWoff2, phosphorCssText, iconoirWoff2, iconoirCssText, faviconB64, annotatorJs, exportCss, navJs] = await Promise.all([
-        fetchAsBase64('./fonts/OstrichSans-Heavy.otf', 'font/otf'),
-        fetchAsBase64('./fonts/OstrichSans-Medium.otf', 'font/otf'),
-        fetchAsBase64('./fonts/phosphor/Phosphor-Light.woff2', 'font/woff2'),
-        fetch('./fonts/phosphor/phosphor.css').then(r => r.text()),
-        fetchAsBase64('./fonts/iconoir.woff2', 'font/woff2'),
-        fetch('./fonts/iconoir-font.css').then(r => r.text()),
-        fetchAsBase64('./icons/icon-32.png', 'image/png'),
-        fetch('./js/annotator.js').then(r => r.text()),
-        fetch('./css/export.css').then(r => r.text()),
-        fetch('./js/export-nav.js').then(r => r.text()),
-    ]);
+    const { ostrichHeavy, ostrichMed, phosphorWoff2, phosphorCssText,
+            iconoirWoff2, iconoirCssText, faviconB64, annotatorJs, exportCss, navJs } =
+        await _loadExportAssets();
 
     const patchedPhosphor = phosphorCssText.replace(
         /url\(["']?\.\/Phosphor-Light\.woff2["']?\)/,
@@ -318,6 +351,7 @@ export async function exportPresentation(slides, docTitle, { preambleCss = '' } 
     const html = _presentationHtml({
         fontFacesCss, patchedPhosphor, patchedIconoir, exportCss, preambleCss,
         faviconTag: `<link rel="icon" href="${faviconB64}" type="image/png" />`,
+        faviconSrc: faviconB64,
         pageTitle, overviewHtml, slidesHtml, notesHtml, total, annotatorJs, navJs,
         startIndex: null,
     });
@@ -357,25 +391,57 @@ export async function exportPresentation(slides, docTitle, { preambleCss = '' } 
 // ── Present mode HTML (absolute font URLs — works for window.open, not srcdoc) ─
 
 export async function buildPresentHtml(slides, { preambleCss = '', startIndex = 0 } = {}) {
-    const base = new URL('./', window.location.href).href;
+    let fontFacesCss, patchedPhosphor, patchedIconoir, annotatorJs, exportCss, navJs, faviconSrc;
 
-    const [phosphorCssText, iconoirCssText, annotatorJs, exportCss, navJs] = await Promise.all([
-        fetch('./fonts/phosphor/phosphor.css').then(r => r.text()),
-        fetch('./fonts/iconoir-font.css').then(r => r.text()),
-        fetch('./js/annotator.js').then(r => r.text()),
-        fetch('./css/export.css').then(r => r.text()),
-        fetch('./js/export-nav.js').then(r => r.text()),
-    ]);
-
-    const patchedPhosphor = phosphorCssText.replace(
-        /url\(["']?\.\/Phosphor-Light\.woff2["']?\)/,
-        `url("${base}fonts/phosphor/Phosphor-Light.woff2")`
-    );
-    const patchedIconoir = iconoirCssText.replace(
-        /url\(["']?\.\/iconoir\.woff2["']?\)/,
-        `url("${base}fonts/iconoir.woff2")`
-    );
-    const fontFacesCss = `@font-face {
+    if (window.SCREAM_ASSETS) {
+        // Single-file / file:// context: use pre-baked base64 assets.
+        const a = await _loadExportAssets();
+        patchedPhosphor = a.phosphorCssText.replace(
+            /url\(["']?\.\/Phosphor-Light\.woff2["']?\)/,
+            `url("${a.phosphorWoff2}")`
+        );
+        patchedIconoir = a.iconoirCssText.replace(
+            /url\(["']?\.\/iconoir\.woff2["']?\)/,
+            `url("${a.iconoirWoff2}")`
+        );
+        fontFacesCss = `@font-face {
+  font-family: 'OstrichSans';
+  src: url('${a.ostrichHeavy}') format('opentype');
+  font-weight: 900;
+}
+@font-face {
+  font-family: 'OstrichSans';
+  src: url('${a.ostrichMed}') format('opentype');
+  font-weight: 500;
+}`;
+        annotatorJs = a.annotatorJs;
+        exportCss   = a.exportCss;
+        navJs       = a.navJs;
+        faviconSrc  = a.faviconB64;
+    } else {
+        // PWA / dev-server context: use absolute URLs so no base64 encoding overhead.
+        const base = new URL('./', window.location.href).href;
+        faviconSrc = `${base}icons/icon-32.png`;
+        const [phosphorCssText, iconoirCssText, _annotatorJs, _exportCss, _navJs] =
+            await Promise.all([
+                fetch('./fonts/phosphor/phosphor.css').then(r => r.text()),
+                fetch('./fonts/iconoir-font.css').then(r => r.text()),
+                fetch('./js/annotator.js').then(r => r.text()),
+                fetch('./css/export.css').then(r => r.text()),
+                fetch('./js/export-nav.js').then(r => r.text()),
+            ]);
+        annotatorJs = _annotatorJs;
+        exportCss   = _exportCss;
+        navJs       = _navJs;
+        patchedPhosphor = phosphorCssText.replace(
+            /url\(["']?\.\/Phosphor-Light\.woff2["']?\)/,
+            `url("${base}fonts/phosphor/Phosphor-Light.woff2")`
+        );
+        patchedIconoir = iconoirCssText.replace(
+            /url\(["']?\.\/iconoir\.woff2["']?\)/,
+            `url("${base}fonts/iconoir.woff2")`
+        );
+        fontFacesCss = `@font-face {
   font-family: 'OstrichSans';
   src: url('${base}fonts/OstrichSans-Heavy.otf') format('opentype');
   font-weight: 900;
@@ -385,6 +451,7 @@ export async function buildPresentHtml(slides, { preambleCss = '', startIndex = 
   src: url('${base}fonts/OstrichSans-Medium.otf') format('opentype');
   font-weight: 500;
 }`;
+    }
 
     const total        = slides.length;
     const slidesHtml   = slides.map((s, i) => buildSlideEl(s, i, total)).join('\n');
@@ -393,7 +460,8 @@ export async function buildPresentHtml(slides, { preambleCss = '', startIndex = 
 
     return _presentationHtml({
         fontFacesCss, patchedPhosphor, patchedIconoir, exportCss, preambleCss,
-        faviconTag: '', pageTitle: 'Presentation',
+        faviconTag: '', faviconSrc: faviconSrc ?? '',
+        pageTitle: 'Presentation',
         overviewHtml, slidesHtml, notesHtml, total, annotatorJs, navJs,
         startIndex,
     });

@@ -12,6 +12,7 @@ const CACHE_FILES = [
   './icons/icon-32.png',
   './icons/icon-512.png',
   './index.html',
+  './js/css-snippets.js',
   './js/editor.js',
   './js/exporter.js',
   './js/iconoir-icons.js',

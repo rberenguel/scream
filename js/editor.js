@@ -3,6 +3,7 @@ import { cursorPosition } from '../libs/codejar-cursor.js';
 import { parseSlides, slideAtLine } from './parser.js';
 import { PHOSPHOR_ICONS } from './phosphor-icons.js';
 import { ICONOIR_ICONS } from './iconoir-icons.js';
+import { CSS_SNIPPETS } from './css-snippets.js';
 
 /** @type {ReturnType<typeof CodeJar>|null} */
 let jar = null;
@@ -75,46 +76,66 @@ function _textBeforeCursor() {
     } catch { return ''; }
 }
 
-// ── Icon autocomplete ───────────────────────────────────────────────────────
+// ── Autocomplete (icons + CSS snippets) ────────────────────────────────────
 
 let _acDropdown = null;
-let _acItems    = [];
+let _acItems    = [];   // string[] for icons, {name,desc,code}[] for css
 let _acIndex    = -1;
-let _acPrefix   = '';
+let _acMode     = 'icon'; // 'icon' | 'css'
+let _acPrefix   = '';     // icon prefix ('ph' | 'in'), unused in css mode
 let _acFrom     = 0;
 
-function _getMatch(before) {
+function _getIconMatch(before) {
     const m = before.match(/:(ph|in)-([a-z0-9-]*)$/);
     if (!m) return null;
     const [full, prefix, partial] = m;
     const icons = prefix === 'ph' ? PHOSPHOR_ICONS : ICONOIR_ICONS;
     const matches = icons.filter(n => n.startsWith(partial)).slice(0, 12);
-    return matches.length ? { prefix, matches, from: before.length - full.length } : null;
+    return matches.length ? { mode: 'icon', prefix, matches, from: before.length - full.length } : null;
+}
+
+function _getCssMatch(before) {
+    // Only in preamble — no `# ` slide heading has appeared before the cursor yet
+    if (/^#\s/m.test(before)) return null;
+    const m = before.match(/\.([a-z0-9-]*)$/);
+    if (!m) return null;
+    const partial = m[1];
+    const matches = CSS_SNIPPETS.filter(s => s.name.startsWith(partial));
+    return matches.length ? { mode: 'css', matches, from: before.length - m[0].length } : null;
 }
 
 function _checkAutocomplete() {
-    const match = _getMatch(_textBeforeCursor());
+    const before = _textBeforeCursor();
+    const match = _getIconMatch(before) ?? _getCssMatch(before);
     if (!match) { _hideAc(); return; }
     _showAc(match);
 }
 
-function _showAc({ prefix, matches, from }) {
+function _showAc({ mode, prefix, matches, from }) {
     if (!_acDropdown) {
         _acDropdown = document.createElement('div');
         _acDropdown.className = 'ac-dropdown';
         document.body.appendChild(_acDropdown);
     }
+    const keepIndex = _acVisible() && from === _acFrom && mode === _acMode;
+    _acMode   = mode;
     _acItems  = matches;
-    _acIndex  = 0;
-    _acPrefix = prefix;
+    _acIndex  = keepIndex ? Math.min(_acIndex, matches.length - 1) : 0;
+    _acPrefix = prefix ?? '';
     _acFrom   = from;
 
     _acDropdown.innerHTML = '';
-    matches.forEach((name, i) => {
+    matches.forEach((item, i) => {
         const el = document.createElement('div');
         el.className = 'ac-item' + (i === 0 ? ' ac-sel' : '');
-        el.textContent = `:${prefix}-${name}:`;
-        el.addEventListener('mousedown', e => { e.preventDefault(); _applyAc(prefix, name); });
+        if (mode === 'icon') {
+            el.textContent = `:${prefix}-${item}:`;
+        } else {
+            el.innerHTML =
+                `<span class="ac-name">.${item.name}</span>` +
+                `<span class="ac-desc">${item.desc}</span>`;
+        }
+        el.addEventListener('mousedown', e => { e.preventDefault(); _acIndex = i; _applySelected(); });
         _acDropdown.appendChild(el);
     });
 
@@ -139,25 +160,37 @@ function _acMoveSel(delta) {
     _acDropdown.children[_acIndex]?.scrollIntoView({ block: 'nearest' });
 }
 
-function _applyAc(prefix, name) {
-    const insertion = `:${prefix}-${name}:`;
-    try {
-        const curPos = jar.save();
-        jar.restore({ start: _acFrom, end: curPos.start, dir: '->' });
-        document.execCommand('insertText', false, insertion);
-    } catch (e) { console.error('[Scream] autocomplete:', e); }
+function _applySelected() {
+    const item = _acItems[_acIndex];
+    if (item == null) return;
+    if (_acMode === 'icon') {
+        const insertion = `:${_acPrefix}-${item}:`;
+        try {
+            const curPos = jar.save();
+            jar.restore({ start: _acFrom, end: curPos.start, dir: '->' });
+            document.execCommand('insertText', false, insertion);
+        } catch (e) { console.error('[Scream] icon autocomplete:', e); }
+    } else {
+        try {
+            const curPos = jar.save();
+            const text = jar.toString();
+            const newText = text.slice(0, _acFrom) + item.code + text.slice(curPos.start);
+            jar.updateCode(newText);
+            jar.restore({ start: _acFrom + item.code.length, end: _acFrom + item.code.length, dir: '->' });
+        } catch (e) { console.error('[Scream] css autocomplete:', e); }
+    }
     _hideAc();
     editorEl?.focus();
 }
 
 function _handleAcKey(e) {
     if (!_acVisible()) return false;
-    if (e.key === 'ArrowDown') { e.preventDefault(); _acMoveSel(+1); return true; }
-    if (e.key === 'ArrowUp')   { e.preventDefault(); _acMoveSel(-1); return true; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); e.stopImmediatePropagation(); _acMoveSel(+1); return true; }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); e.stopImmediatePropagation(); _acMoveSel(-1); return true; }
     if (e.key === 'Escape')    { e.preventDefault(); _hideAc();      return true; }
     if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
-        if (_acIndex >= 0 && _acItems[_acIndex]) _applyAc(_acPrefix, _acItems[_acIndex]);
+        _applySelected();
         return true;
     }
     return false;
@@ -204,7 +237,12 @@ export function setupEditor(container, initialDoc, { onUpdate, onSave, onOpen, o
             const before = _textBeforeCursor();
             if (before.split('\n').pop().startsWith('# ')) {
                 e.preventDefault();
-                document.execCommand('insertText', false, '\n\n# ');
+                const pos = jar.save();
+                const ins = '\n\n# ';
+                const newText = jar.toString().slice(0, pos.start) + ins + jar.toString().slice(pos.end);
+                const newPos = pos.start + ins.length;
+                jar.updateCode(newText);
+                jar.restore({ start: newPos, end: newPos, dir: '->' });
             }
         }
     });

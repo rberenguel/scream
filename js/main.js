@@ -344,7 +344,7 @@ async function handleEditorUpdate(docText, cursorLine) {
     activeIndex = slides.length > 0 ? slideAtLine(slides, cursorLine) : -1;
 
     // Live-update the tab label
-    const newLabel = slides[0]?.title ?? 'untitled';
+    const newLabel = slides[0]?.cleanTitle ?? slides[0]?.title ?? 'untitled';
     if (tab.label !== newLabel) {
         tab.label = newLabel;
         const labelEl = tabBar?.querySelector(`.tab-item[data-tab-id="${tab.id}"] .tab-title`);
@@ -355,7 +355,7 @@ async function handleEditorUpdate(docText, cursorLine) {
     timelineCount.textContent = slides.length > 0 ? slides.length : '';
 
     const slide = slides[activeIndex] ?? null;
-    renderPreview(slide?.title ?? null, activeIndex, slides.length);
+    renderPreview(slide?.title ?? null, activeIndex, slides.length, slide?.classes?.includes('no-num'));
 
     statusSlide.textContent = slides.length > 0 ? `${activeIndex + 1} / ${slides.length}` : '';
 }
@@ -381,7 +381,7 @@ function handleReorder(fromIndex, toIndex) {
     renderTimeline(timelineList, slides, activeIndex);
     timelineCount.textContent = slides.length;
 
-    renderPreview(targetSlide?.title ?? null, activeIndex, slides.length);
+    renderPreview(targetSlide?.title ?? null, activeIndex, slides.length, targetSlide?.classes?.includes('no-num'));
     if (targetSlide) goToLine(targetSlide.startLine);
 
     statusSlide.textContent = `${activeIndex + 1} / ${slides.length}`;
@@ -394,7 +394,7 @@ function handleTimelineSelect(index) {
     const slide = slides[index];
 
     renderTimeline(timelineList, slides, activeIndex);
-    renderPreview(slide.title, activeIndex, slides.length);
+    renderPreview(slide.title, activeIndex, slides.length, slide.classes?.includes('no-num'));
     goToLine(slide.startLine);
 
     statusSlide.textContent = `${activeIndex + 1} / ${slides.length}`;

@@ -45,8 +45,13 @@
 
     <div id="help-overlay" class="hidden" role="dialog" aria-modal="true">
         <div id="help-box">
-            <h1>SCREAM <span id="help-version"></span></h1>
-            <p class="help-tagline">One idea per slide. Low-friction teaching prep.</p>
+            <div class="help-header">
+                <img src="./icon.png" class="help-logo" alt="">
+                <div>
+                    <h1>SCREAM <span id="help-version"></span></h1>
+                    <p class="help-tagline">One idea per slide. Low-friction teaching prep.</p>
+                </div>
+            </div>
             <div class="help-grid">
                 <section>
                     <h2>Slides</h2>
@@ -80,6 +85,19 @@
                     <dl>
                         <dt><code>```css … ```</code></dt><dd>CSS preamble<br><span class="help-hint">(before first slide)</span></dd>
                         <dt><code>.cls { text }</code></dt><dd>wrap text in<br><code>&lt;span class="cls"&gt;</code></dd>
+                        <dt><code>.a { text }</code></dt><dd>link colour (dark green)</dd>
+                        <dt><code># .no-num Title</code></dt><dd>hide slide number<br><span class="help-hint">(leading class on <code>#</code> line)</span></dd>
+                    </dl>
+                </section>
+                <section>
+                    <h2>Images</h2>
+                    <dl>
+                        <dt><code>![bg](url)</code></dt><dd>full-bleed background</dd>
+                        <dt><code>![bg brightness(60%) blur(2px)](url)</code></dt><dd>background with CSS filter</dd>
+                        <dt><code>![bg .classname]()</code></dt><dd>class on bg layer<br><span class="help-hint">(define in CSS preamble)</span></dd>
+                        <dt><code>![left](url)</code></dt><dd>50/50 split, image left</dd>
+                        <dt><code>![right](url)</code></dt><dd>50/50 split, image right</dd>
+                        <dt><code>![](url)</code></dt><dd>lone image fills slide</dd>
                     </dl>
                 </section>
                 <section>

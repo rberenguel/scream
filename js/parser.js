@@ -2,8 +2,18 @@
  * Parses markdown where every `# ` line is a slide.
  * Everything between two `# ` lines is "notes" — visible in editor, not in presentation.
  *
- * @typedef {{ title: string, notes: string, startLine: number, endLine: number }} Slide
+ * @typedef {{ title: string, cleanTitle: string, classes: string[], notes: string, startLine: number, endLine: number }} Slide
  */
+
+/**
+ * Strip `.classname { content }` wrappers, leaving only their inner content.
+ * Used to produce plain-text titles for tab labels, outlines, and filenames.
+ * @param {string} text
+ * @returns {string}
+ */
+export function stripInlineStyles(text) {
+    return text.replace(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)\s*\{([^}]*)\}/g, (_, _cls, body) => body).trim();
+}
 
 /**
  * Extract CSS from a ```css fenced block that appears before the first slide.
@@ -33,8 +43,14 @@ export function parseSlides(markdown) {
                 current.notes = lines.slice(current.startLine + 1, i).join('\n').trim();
                 slides.push(current);
             }
+            const raw = lines[i].replace(/^#+\s+/, '').trim();
+            const classMatch = raw.match(/^((?:\.[a-zA-Z_-][a-zA-Z0-9_-]*(?!\s*\{)\s+)*)(.*)$/);
+            const classes = classMatch[1].trim() ? classMatch[1].trim().split(/\s+/).map(c => c.slice(1)) : [];
+            const title = classMatch[2] ?? raw;
             current = {
-                title: lines[i].replace(/^#+\s+/, '').trim(),
+                title,
+                cleanTitle: stripInlineStyles(title),
+                classes,
                 notes: '',
                 startLine: i,
                 endLine: i,

@@ -46,7 +46,7 @@ export function expandIcons(html) {
  * @param {number}      index   - 0-based slide index
  * @param {number}      total
  */
-export function renderPreview(title, index, total) {
+export function renderPreview(title, index, total, hideNumber = false) {
     const el = contentEl();
     if (!el) return;
 
@@ -61,7 +61,7 @@ export function renderPreview(title, index, total) {
 
     const html = expandInlineStyles(expandIcons(marked.parseInline(title)));
     el.replaceWith(buildSlideContent(html));
-    _setBadge(index, total);
+    if (hideNumber) _clearBadge(); else _setBadge(index, total);
 }
 
 export function buildSlideContent(html) {
@@ -94,10 +94,13 @@ export function buildSlideContent(html) {
 
         const sliceContainer = document.createElement('div');
         sliceContainer.className = 'bg-slice-container';
+        const extra = bgInfos[0].match[2]?.trim() ?? '';
+        const isBgClass = extra.startsWith('.');
         bgInfos.forEach(info => {
             const slice = document.createElement('div');
             slice.className = 'bg-slice';
-            slice.style.backgroundImage = `url("${info.el.src}")`;
+            if (info.el.src) slice.style.backgroundImage = `url("${info.el.src}")`;
+            if (isBgClass) extra.split(/\s+/).forEach(c => c.startsWith('.') && slice.classList.add(c.slice(1)));
             sliceContainer.appendChild(slice);
             (info.el.closest('p') || info.el).remove();
         });
@@ -105,8 +108,8 @@ export function buildSlideContent(html) {
 
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-content-wrapper';
-        const filter = bgInfos[0].match[2]?.trim();
-        if (filter) wrapper.style.setProperty('--custom-bg-filter', filter);
+        if (isBgClass) el.style.setProperty('--custom-bg-filter', 'none');
+        else if (extra) el.style.setProperty('--custom-bg-filter', extra);
         wrapper.append(...shadow.childNodes);
         el.append(sliceContainer, wrapper);
 

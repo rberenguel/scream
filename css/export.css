@@ -212,8 +212,10 @@ body.overview-open .overview-pane { width: 170px; }
   -webkit-font-smoothing: antialiased;
 }
 
+/* SYNC: any .slide-content rule here must also exist in css/app.css */
 .slide-content strong { color: var(--strong); font-weight: 900; }
 .slide-content em     { color: var(--em); font-style: italic; }
+.slide-content a, .slide-content .a { color: #060; }
 .slide-content code {
   font-family: monospace;
   font-size: 0.8em;
@@ -244,6 +246,8 @@ body.overview-open .overview-pane { width: 170px; }
   user-select: none;
   pointer-events: none;
 }
+
+.no-num .slide-badge { display: none; }
 
 /* Image layout modes */
 
@@ -614,8 +618,22 @@ body.help-open #help-overlay { display: flex; }
   overflow-y: auto;
 }
 
+.help-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.1rem;
+}
+
+.help-logo {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 7px;
+}
+
 .help-box h2 {
-  margin: 0 0 1.1rem;
+  margin: 0;
   font-size: 0.9rem;
   font-weight: 700;
   text-transform: uppercase;

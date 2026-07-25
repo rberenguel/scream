@@ -50,7 +50,8 @@ Place an image with a special alt-text keyword anywhere in a slide title to trig
 | Syntax | Effect |
 |--------|--------|
 | `![bg](url)` | Full-bleed background, image dimmed and blurred, text on top |
-| `![bg brightness(60%) blur(2px)](url)` | Background with custom filter |
+| `![bg brightness(60%) blur(2px)](url)` | Background with custom CSS filter |
+| `![bg .classname]()` | Background driven by a CSS class (gradient, colour, etc.) |
 | `![left](url) text` | 50/50 split — image left, text right |
 | `![right](url) text` | 50/50 split — image right, text left |
 | `![anything](url)` (lone image, no text) | Simple fill, no overlay |
@@ -74,7 +75,7 @@ Place a fenced CSS block before the first slide to define custom classes:
 # First slide
 ````
 
-The block is live in the editor and inlined into exports.
+The block is live in the editor and inlined into exports. Type `.` inside the preamble for autocomplete — a set of built-in snippets covers common patterns (vignettes, gradients, text badges, etc.).
 
 ### Inline spans
 
@@ -83,9 +84,53 @@ Wrap part of a slide title in a class with `.classname { content }`:
 ```markdown
 # Hello .red { world }
 # .large { BIG } and normal
+# The .a { docs } say so
 ```
 
 Renders as `Hello <span class="red">world</span>` etc. Markdown and icons work inside the braces too.
+
+The built-in class `.a` styles text as a link (dark green, `color: #060`) without an underline — useful for referencing URLs visually without a real `<a>` tag.
+
+### Slide-level classes
+
+Add a bare `.classname` at the start of a `#` line (before the title text) to apply a class to the entire slide wrapper:
+
+```markdown
+# .no-num Hidden from numbering
+
+# .no-num .dark-fade A styled titleless slide
+```
+
+The class is stripped from the displayed title and applied to the slide `div` in the export. The built-in class `.no-num` hides the slide number badge. Any class you define in the CSS preamble works here too.
+
+### Background classes
+
+When using `![bg .classname]()`, the class is applied to the background layer div (`.bg-slice`). Define it in the CSS preamble to control the background independently from the text:
+
+```css
+/* Gradient background — no image needed */
+.warm-grad {
+  background: linear-gradient(135deg, #1a0800, #3d1a00);
+}
+
+/* Vignette overlay on top of an image */
+.vignette::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.65) 100%);
+  pointer-events: none;
+}
+```
+
+Use as:
+
+```markdown
+# .no-num ![bg .warm-grad]()
+# The night sky ![bg .vignette](backgrounds/stars.jpg)
+```
+
+The `.` autocomplete in the preamble offers ready-made snippets for both bg-layer classes (vignette, spotlight, warm-grad, cool-grad, dark-fade) and inline text classes (highlight, tag, box, big, small, mono, muted, warn, err, ok, upper, underline).
 
 ## Editor shortcuts
 
@@ -93,13 +138,15 @@ Renders as `Hello <span class="red">world</span>` etc. Markdown and icons work i
 |-----|--------|
 | `Cmd-S` | Save (shows file picker on first save) |
 | `Cmd-O` / `O` | Open a `.md` file |
-| `Cmd-E` | Export as standalone HTML |
+| `Cmd-T` | New tab |
+| `Cmd-W` | Close tab |
+| `P` | Enter present mode (full-screen overlay) |
 | `Tab` | Insert tab character |
 | `?` | Toggle help overlay |
 
 ## Export
 
-`Cmd-E` (or the Export button) generates a fully standalone `.html` file — all fonts base64-inlined, zero external dependencies. Open it in any browser to present.
+The **Export** button generates a fully standalone `.html` file — all fonts base64-inlined, zero external dependencies. Open it in any browser to present.
 
 ### Presentation controls
 
@@ -107,12 +154,14 @@ Renders as `Hello <span class="red">world</span>` etc. Markdown and icons work i
 |-----|--------|
 | `← →` / `Space` | Previous / next slide |
 | `Home` / `End` | First / last slide |
+| `1` / `2` / `3` | Slide scale — full / medium / small |
 | `O` | Toggle overview sidebar |
 | `N` | Toggle speaker notes panel |
 | `L` | Toggle light / dark theme |
 | `P` | Open presenter window (synced via BroadcastChannel) |
 | `B` | Blackout screen |
 | `D` | Enter / exit draw mode |
+| `?` | Help overlay |
 
 ### Draw mode tools
 
