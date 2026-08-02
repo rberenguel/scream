@@ -214,6 +214,9 @@ body.overview-open .overview-pane { width: 170px; }
 
 /* SYNC: any .slide-content rule here must also exist in css/app.css */
 .slide-content br { line-height: 0; }
+.slide-content.multiline { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.slide-content .slide-line { font-size: var(--slide-fs, 11cqi); line-height: 0; }
+.slide-content .slide-line > * { line-height: 1.1; }
 .slide-content strong { color: var(--strong); font-weight: 900; }
 .slide-content em     { color: var(--em); font-style: italic; }
 .slide-content a, .slide-content .a { color: #060; }

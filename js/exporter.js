@@ -84,6 +84,41 @@ function expandIcons(html) {
     });
 }
 
+function splitAtBr(shadow) {
+    let br;
+    while ((br = shadow.querySelector(':scope > * br'))) {
+        const parent = br.parentElement;
+        const before = parent.cloneNode(false);
+        const after  = parent.cloneNode(false);
+        let past = false;
+        for (const child of [...parent.childNodes]) {
+            if (child === br) { past = true; continue; }
+            (past ? after : before).appendChild(child.cloneNode(true));
+        }
+        const frag = document.createDocumentFragment();
+        if (before.childNodes.length) frag.appendChild(before);
+        frag.appendChild(document.createElement('br'));
+        if (after.childNodes.length) frag.appendChild(after);
+        parent.replaceWith(frag);
+    }
+    const lines = [];
+    let current = [];
+    for (const node of [...shadow.childNodes]) {
+        if (node.tagName === 'BR') {
+            lines.push(current);
+            current = [];
+        } else if (node.nodeType === Node.TEXT_NODE) {
+            const span = document.createElement('span');
+            span.textContent = node.textContent;
+            current.push(span);
+        } else {
+            current.push(node);
+        }
+    }
+    if (current.length) lines.push(current);
+    return lines.filter(l => l.some(n => n.textContent.trim() !== ''));
+}
+
 function slideContentFontSize(textLen) {
     if (textLen > 60) return '5cqi';
     if (textLen > 35) return '7cqi';
@@ -156,8 +191,19 @@ function buildSlideContentEl(titleHtml) {
 
     } else {
         const fontSize = slideContentFontSize(shadow.textContent.length);
-        if (fontSize) el.style.fontSize = fontSize;
-        el.append(...shadow.childNodes);
+        if (shadow.querySelector('br')) {
+            el.classList.add('multiline');
+            el.style.setProperty('--slide-fs', fontSize || '11cqi');
+            for (const nodes of splitAtBr(shadow)) {
+                const line = document.createElement('div');
+                line.className = 'slide-line';
+                line.append(...nodes);
+                el.appendChild(line);
+            }
+        } else {
+            if (fontSize) el.style.fontSize = fontSize;
+            el.append(...shadow.childNodes);
+        }
     }
 
     return el;

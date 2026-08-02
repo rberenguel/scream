@@ -64,6 +64,45 @@ export function renderPreview(title, index, total, hideNumber = false) {
     if (hideNumber) _clearBadge(); else _setBadge(index, total);
 }
 
+function splitAtBr(shadow) {
+    // Promote all nested <br> to direct children of shadow by splitting their
+    // ancestor elements at each <br> boundary.
+    let br;
+    while ((br = shadow.querySelector(':scope > * br'))) {
+        const parent = br.parentElement;
+        const before = parent.cloneNode(false);
+        const after  = parent.cloneNode(false);
+        let past = false;
+        for (const child of [...parent.childNodes]) {
+            if (child === br) { past = true; continue; }
+            (past ? after : before).appendChild(child.cloneNode(true));
+        }
+        const frag = document.createDocumentFragment();
+        if (before.childNodes.length) frag.appendChild(before);
+        frag.appendChild(document.createElement('br'));
+        if (after.childNodes.length) frag.appendChild(after);
+        parent.replaceWith(frag);
+    }
+    // Group nodes between top-level <br>s into per-line arrays.
+    // Bare text nodes are wrapped in <span> so CSS line-height can be controlled.
+    const lines = [];
+    let current = [];
+    for (const node of [...shadow.childNodes]) {
+        if (node.tagName === 'BR') {
+            lines.push(current);
+            current = [];
+        } else if (node.nodeType === Node.TEXT_NODE) {
+            const span = document.createElement('span');
+            span.textContent = node.textContent;
+            current.push(span);
+        } else {
+            current.push(node);
+        }
+    }
+    if (current.length) lines.push(current);
+    return lines.filter(l => l.some(n => n.textContent.trim() !== ''));
+}
+
 export function buildSlideContent(html) {
     const shadow = document.createElement('div');
     shadow.innerHTML = html;
@@ -130,11 +169,23 @@ export function buildSlideContent(html) {
 
     } else {
         const textLen = shadow.textContent.length;
-        el.style.fontSize =
+        const fontSize =
             textLen > 60 ? '5cqi' :
             textLen > 35 ? '7cqi' :
             textLen > 20 ? '9cqi' : '';
-        el.append(...shadow.childNodes);
+        if (shadow.querySelector('br')) {
+            el.classList.add('multiline');
+            el.style.setProperty('--slide-fs', fontSize || '11cqi');
+            for (const nodes of splitAtBr(shadow)) {
+                const line = document.createElement('div');
+                line.className = 'slide-line';
+                line.append(...nodes);
+                el.appendChild(line);
+            }
+        } else {
+            el.style.fontSize = fontSize;
+            el.append(...shadow.childNodes);
+        }
     }
 
     return el;

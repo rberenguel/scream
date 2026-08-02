@@ -431,6 +431,120 @@ var (
 	reImgAlt     = regexp.MustCompile(`alt="([^"]*)"`)
 )
 
+var voidHTMLElements = map[string]bool{
+	"area": true, "base": true, "br": true, "col": true,
+	"embed": true, "hr": true, "img": true, "input": true,
+	"link": true, "meta": true, "source": true, "track": true, "wbr": true,
+}
+
+func htmlTagName(tag string) string {
+	s := tag
+	if len(s) < 2 || s[0] != '<' {
+		return ""
+	}
+	s = s[1:]
+	if s[0] == '/' {
+		s = s[1:]
+	}
+	end := strings.IndexAny(s, " \t\n/>")
+	if end < 0 {
+		return strings.ToLower(s)
+	}
+	return strings.ToLower(s[:end])
+}
+
+// promoteOneBr finds the first <br> nested inside a non-void element and splits
+// that element at the <br> boundary. Returns the modified string and true if a
+// promotion occurred.
+func promoteOneBr(s string) (string, bool) {
+	i := 0
+	for i < len(s) {
+		if s[i] != '<' {
+			i++
+			continue
+		}
+		sub := s[i:]
+		if strings.HasPrefix(sub, "<br>") {
+			i += 4
+			continue
+		}
+		if strings.HasPrefix(sub, "</") {
+			end := strings.Index(sub, ">")
+			if end < 0 {
+				break
+			}
+			i += end + 1
+			continue
+		}
+		tagEnd := strings.Index(sub, ">")
+		if tagEnd < 0 {
+			break
+		}
+		openTag := sub[:tagEnd+1]
+		if strings.HasSuffix(openTag, "/>") {
+			i += tagEnd + 1
+			continue
+		}
+		tagName := htmlTagName(openTag)
+		if tagName == "" || voidHTMLElements[tagName] {
+			i += tagEnd + 1
+			continue
+		}
+		contentStart := i + tagEnd + 1
+		closeTag := "</" + tagName + ">"
+		closeIdx := strings.Index(s[contentStart:], closeTag)
+		if closeIdx < 0 {
+			i += tagEnd + 1
+			continue
+		}
+		content := s[contentStart : contentStart+closeIdx]
+		brIdx := strings.Index(content, "<br>")
+		if brIdx < 0 {
+			i += tagEnd + 1 + closeIdx + len(closeTag)
+			continue
+		}
+		before := content[:brIdx]
+		after := content[brIdx+4:]
+		suffix := s[contentStart+closeIdx+len(closeTag):]
+		var sb strings.Builder
+		sb.WriteString(s[:i])
+		if strings.TrimSpace(before) != "" {
+			sb.WriteString(openTag)
+			sb.WriteString(before)
+			sb.WriteString(closeTag)
+		}
+		sb.WriteString("<br>")
+		if strings.TrimSpace(after) != "" {
+			sb.WriteString(openTag)
+			sb.WriteString(after)
+			sb.WriteString(closeTag)
+		}
+		sb.WriteString(suffix)
+		return sb.String(), true
+	}
+	return s, false
+}
+
+// splitAtBr iteratively promotes nested <br> elements to the top level, then
+// splits on <br> boundaries. Returns one HTML fragment per visual line.
+func splitAtBr(titleHtml string) []string {
+	for {
+		promoted, changed := promoteOneBr(titleHtml)
+		if !changed {
+			break
+		}
+		titleHtml = promoted
+	}
+	var lines []string
+	for _, part := range strings.Split(titleHtml, "<br>") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			lines = append(lines, part)
+		}
+	}
+	return lines
+}
+
 func expandIcons(s string) string {
 	return reIconColon.ReplaceAllStringFunc(s, func(match string) string {
 		name := reIconColon.FindStringSubmatch(match)[1]
@@ -568,6 +682,31 @@ func buildSlideContentHtml(titleHtml string) string {
 	case textLen > 20:
 		fontSize = "9cqi"
 	}
+
+	if strings.Contains(titleHtml, "<br>") {
+		fs := fontSize
+		if fs == "" {
+			fs = "11cqi"
+		}
+		var sb strings.Builder
+		sb.WriteString(`<div class="slide-content multiline" style="--slide-fs: ` + fs + `">`)
+		for _, line := range splitAtBr(titleHtml) {
+			// A line that is exactly one <span>...</span> is used directly so that
+			// CSS can target it as .slide-line > .classname (strut control).
+			// Everything else is wrapped in a plain <span> so line-height applies.
+			isSingleSpan := strings.HasPrefix(line, "<span") &&
+				strings.HasSuffix(line, "</span>") &&
+				strings.Count(line, "</span>") == 1
+			if isSingleSpan {
+				sb.WriteString(`<div class="slide-line">` + line + `</div>`)
+			} else {
+				sb.WriteString(`<div class="slide-line"><span>` + line + `</span></div>`)
+			}
+		}
+		sb.WriteString(`</div>`)
+		return sb.String()
+	}
+
 	style := ""
 	if fontSize != "" {
 		style = ` style="font-size: ` + fontSize + `"`

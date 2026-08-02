@@ -422,6 +422,9 @@ html, body {
 /* Nord palette: --yellow: #ebcb8b, ostrich dark strong override: #ff7043 */
 /* SYNC: any .slide-content rule here must also exist in css/export.css */
 .slide-content br { line-height: 0; }
+.slide-content.multiline { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.slide-content .slide-line { font-size: var(--slide-fs, 11cqi); line-height: 0; }
+.slide-content .slide-line > * { line-height: 1.1; }
 .slide-content a, .slide-content .a { color: #060; }
 
 .slide-content strong {
