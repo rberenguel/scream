@@ -213,6 +213,7 @@ body.overview-open .overview-pane { width: 170px; }
 }
 
 /* SYNC: any .slide-content rule here must also exist in css/app.css */
+.slide-content br { line-height: 0; }
 .slide-content strong { color: var(--strong); font-weight: 900; }
 .slide-content em     { color: var(--em); font-style: italic; }
 .slide-content a, .slide-content .a { color: #060; }

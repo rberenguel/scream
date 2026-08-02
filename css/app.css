@@ -421,6 +421,7 @@ html, body {
 /* Inline markdown inside slide titles */
 /* Nord palette: --yellow: #ebcb8b, ostrich dark strong override: #ff7043 */
 /* SYNC: any .slide-content rule here must also exist in css/export.css */
+.slide-content br { line-height: 0; }
 .slide-content a, .slide-content .a { color: #060; }
 
 .slide-content strong {
