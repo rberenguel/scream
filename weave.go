@@ -44,6 +44,20 @@ func readBase64(path, mime string) string {
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(b)
 }
 
+func readManifestVersion(rootDir string) string {
+	b, err := os.ReadFile(filepath.Join(rootDir, "manifest.json"))
+	if err != nil {
+		return "dev"
+	}
+	var m struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(b, &m); err != nil || m.Version == "" {
+		return "dev"
+	}
+	return m.Version
+}
+
 func jsonStr(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
@@ -378,6 +392,9 @@ func main() {
 
 	indexHtml := readText(filepath.Join(rootDir, "index.html"))
 	result := processHtml(indexHtml, rootDir)
+	reVersionDecl := regexp.MustCompile(`let VERSION = '__SCREAM_VERSION__';`)
+	result = reVersionDecl.ReplaceAllLiteralString(result,
+		"let VERSION = '"+readManifestVersion(rootDir)+"';")
 	// Must run last: hashes are computed over the exact final script/style bytes.
 	result = injectCSP(result)
 

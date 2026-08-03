@@ -426,19 +426,13 @@ function handleGlobalKey(e) {
 
 // ── Help ───────────────────────────────────────────────────────────────────
 
-let _version = null;
+let VERSION = '__SCREAM_VERSION__';
 
 async function toggleHelp(force) {
     const overlay = document.getElementById('help-overlay');
     const show = force !== undefined ? force : overlay.classList.contains('hidden');
     overlay.classList.toggle('hidden', !show);
-    if (show && _version === null) {
-        try {
-            const { version } = await fetch('./manifest.json').then(r => r.json());
-            _version = version ?? '';
-        } catch { _version = ''; }
-        document.getElementById('help-version').textContent = _version ? `v${_version}` : '';
-    }
+    document.getElementById('help-version').textContent = VERSION ? `v${VERSION}` : '';
 }
 
 // ── Mobile menu drawer (left edge) ────────────────────────────────────────
