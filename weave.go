@@ -8,11 +8,14 @@
 //   2. Inlines libs/marked.min.js as a plain <script>
 //   3. Injects window.SCREAM_ASSETS with pre-baked fonts/CSS/JS for the exporter
 //   4. Bundles the ES-module graph (js/main.js + transitive imports) into an IIFE
-//   5. Removes the manifest link, favicon link (replaced with data URI), and SW block
+//   5. Embeds manifest.json (icons inlined) as a data URI — keeps PWA installable
+//   6. Inlines favicon, removes SW block
+//   7. Injects a Content-Security-Policy meta tag (SHA-256 hashes of all inline blocks)
 
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
@@ -65,10 +68,10 @@ func mimeForExt(ext string) string {
 	return ""
 }
 
-// patchCssFontUrls replaces url(./relative/path) in CSS with base64 data URIs.
+// patchCssFontUrls replaces url(relative/path) in CSS with base64 data URIs.
 // cssDir is the directory that the CSS file lives in (for resolving relative URLs).
 func patchCssFontUrls(css, cssDir string) string {
-	re := regexp.MustCompile(`url\(["']?(\./[^"')]+)["']?\)`)
+	re := regexp.MustCompile(`url\(["']?(\.\.?/[^"')]+)["']?\)`)
 	return re.ReplaceAllStringFunc(css, func(match string) string {
 		m := re.FindStringSubmatch(match)
 		if m == nil {
@@ -127,7 +130,7 @@ func buildScreamAssets(rootDir string) string {
 // ── JS module bundler ─────────────────────────────────────────────────────────
 
 var (
-	reImport      = regexp.MustCompile(`^import\s+\{[^}]*\}\s+from\s+['"]([^'"]+)['"]`)
+	reImport      = regexp.MustCompile(`(?s)import\s+\{[^}]*\}\s+from\s+['"]([^'"]+)['"];?`)
 	reExportDecl  = regexp.MustCompile(`^(export\s+)((?:async\s+)?(?:function|const|let|var|class)\b)`)
 	reExportBrace = regexp.MustCompile(`^export\s*\{[^}]*\}`)
 	reExportDef   = regexp.MustCompile(`^export\s+default\b`)
@@ -147,39 +150,29 @@ func (b *bundler) walk(absPath string) {
 	src := readText(absPath)
 	dir := filepath.Dir(absPath)
 
-	// Walk imports first so dependencies land before this file (topological order).
-	for _, raw := range strings.Split(src, "\n") {
-		line := strings.TrimSpace(raw)
-		if m := reImport.FindStringSubmatch(line); m != nil {
-			spec := m[1]
-			if strings.HasPrefix(spec, ".") {
-				resolved := filepath.Clean(filepath.Join(dir, spec))
-				b.walk(resolved)
-			}
+	// Walk imports first (topological order); handles multiline import blocks.
+	for _, m := range reImport.FindAllStringSubmatch(src, -1) {
+		spec := m[1]
+		if strings.HasPrefix(spec, ".") {
+			resolved := filepath.Clean(filepath.Join(dir, spec))
+			b.walk(resolved)
 		}
 	}
 
-	// Strip import/export syntax, collect transformed lines.
+	// Strip all import blocks, then process line-by-line for export stripping.
+	stripped := reImport.ReplaceAllString(src, "")
+
 	var out []string
-	for _, raw := range strings.Split(src, "\n") {
+	for _, raw := range strings.Split(stripped, "\n") {
 		line := strings.TrimSpace(raw)
 
-		// Drop import statements (dependency already inlined above).
-		if reImport.MatchString(line) {
-			continue
-		}
-		// Drop `export { foo, bar }` re-export lines.
 		if reExportBrace.MatchString(line) {
 			continue
 		}
-		// Drop `export default` (not used in this codebase).
 		if reExportDef.MatchString(line) {
 			continue
 		}
-		// Strip `export ` prefix from `export function`, `export const`, etc.
-		// Preserve original indentation by operating on raw (unstripped) line.
 		if reExportDecl.MatchString(line) {
-			// Find and remove the first `export ` in the raw line.
 			if idx := strings.Index(raw, "export "); idx >= 0 {
 				raw = raw[:idx] + raw[idx+7:]
 			}
@@ -215,11 +208,95 @@ func buildIifeBundle(rootDir string) string {
 	return iife
 }
 
+// ── Manifest embedding ────────────────────────────────────────────────────────
+
+// embedManifest inlines manifest.json — with all icons base64-encoded — as a
+// data URI on the <link rel="manifest"> tag. This keeps the single-file build
+// installable as a PWA without a sibling manifest.json.
+func embedManifest(html, rootDir string) string {
+	manifestPath := filepath.Join(rootDir, "manifest.json")
+	raw, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return html
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		panic(fmt.Sprintf("parse manifest.json: %v", err))
+	}
+
+	// Inline each icon's src as a base64 data URI.
+	if icons, ok := m["icons"].([]interface{}); ok {
+		for _, iconI := range icons {
+			if icon, ok := iconI.(map[string]interface{}); ok {
+				if src, ok := icon["src"].(string); ok && !strings.HasPrefix(src, "data:") {
+					iconPath := filepath.Join(rootDir, src)
+					if _, err := os.Stat(iconPath); err == nil {
+						icon["src"] = readBase64(iconPath, "image/png")
+					}
+				}
+			}
+		}
+	}
+	m["start_url"] = "/"
+
+	out, err := json.Marshal(m)
+	if err != nil {
+		panic(fmt.Sprintf("marshal manifest: %v", err))
+	}
+	dataURI := "data:application/manifest+json;base64," + base64.StdEncoding.EncodeToString(out)
+
+	reManifest := regexp.MustCompile(`<link rel="manifest" href="[^"]*"[^>]*/?>`)
+	return reManifest.ReplaceAllLiteralString(html, `<link rel="manifest" href="`+dataURI+`" />`)
+}
+
+// ── CSP hashing ───────────────────────────────────────────────────────────────
+
+var (
+	reScriptBlock = regexp.MustCompile(`(?s)<script(?:\s[^>]*)?>(.*?)</script>`)
+	reStyleBlock  = regexp.MustCompile(`(?s)<style(?:\s[^>]*)?>(.*?)</style>`)
+)
+
+func cspHash(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+}
+
+// injectCSP scans the assembled HTML for every inline <script> and <style>
+// block, hashes each, and inserts a Content-Security-Policy <meta> tag.
+func injectCSP(html string) string {
+	var scriptHashes, styleHashes []string
+
+	for _, m := range reScriptBlock.FindAllStringSubmatch(html, -1) {
+		if strings.Contains(m[0][:len(m[0])-len(m[1])-len("</script>")], "src=") {
+			continue
+		}
+		scriptHashes = append(scriptHashes, cspHash(m[1]))
+	}
+	for _, m := range reStyleBlock.FindAllStringSubmatch(html, -1) {
+		styleHashes = append(styleHashes, cspHash(m[1]))
+	}
+
+	csp := "default-src 'self'; " +
+		"script-src 'self' " + strings.Join(scriptHashes, " ") + "; " +
+		"style-src 'self' 'unsafe-inline'; " +
+		"img-src 'self' data:; font-src 'self' data:; " +
+		"manifest-src 'self' data:; " +
+		"connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+
+	metaTag := fmt.Sprintf(`  <meta http-equiv="Content-Security-Policy" content="%s" />`+"\n", csp)
+
+	reCharset := regexp.MustCompile(`(<meta charset="UTF-8" />\n)`)
+	if reCharset.MatchString(html) {
+		return reCharset.ReplaceAllString(html, "${1}"+strings.ReplaceAll(metaTag, "$", "$$"))
+	}
+	return regexp.MustCompile(`(<head>\n)`).ReplaceAllString(html, "${1}"+strings.ReplaceAll(metaTag, "$", "$$"))
+}
+
 // ── HTML processing ───────────────────────────────────────────────────────────
 
 func processHtml(src, rootDir string) string {
-	// Remove <link rel="manifest" ...>
-	src = regexp.MustCompile(`\s*<link rel="manifest"[^>]*/?>`).ReplaceAllString(src, "")
+	// Embed manifest.json (icons inlined) as a data URI instead of stripping.
+	src = embedManifest(src, rootDir)
 
 	// Remove SW registration <script> block.
 	src = regexp.MustCompile(`(?s)\s*<script>\s*if\s*\('serviceWorker'\s+in\s+navigator\).*?</script>`).
@@ -234,6 +311,26 @@ func processHtml(src, rootDir string) string {
 		}
 		dataURI := readBase64(filepath.Join(rootDir, m[1]), "image/png")
 		return `<link rel="icon" href="` + dataURI + `" type="image/png" />`
+	})
+
+	// Inline img src attributes pointing to local files.
+	reImg := regexp.MustCompile(`<img([^>]*) src="(\./[^"]+)"([^>]*)>`)
+	src = reImg.ReplaceAllStringFunc(src, func(match string) string {
+		m := reImg.FindStringSubmatch(match)
+		if m == nil {
+			return match
+		}
+		imgPath := filepath.Join(rootDir, m[2])
+		mime := mimeForExt(filepath.Ext(m[2]))
+		if mime == "" {
+			return match
+		}
+		b, err := os.ReadFile(imgPath)
+		if err != nil {
+			return match
+		}
+		dataURI := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(b)
+		return "<img" + m[1] + ` src="` + dataURI + `"` + m[3] + ">"
 	})
 
 	// Inline CSS files, patching relative font URLs to base64 data URIs.
@@ -281,6 +378,8 @@ func main() {
 
 	indexHtml := readText(filepath.Join(rootDir, "index.html"))
 	result := processHtml(indexHtml, rootDir)
+	// Must run last: hashes are computed over the exact final script/style bytes.
+	result = injectCSP(result)
 
 	outPath, err := filepath.Abs(*outFlag)
 	if err != nil {
