@@ -1,5 +1,5 @@
 // CACHE_FILES: generated with get_cache.go — run `go run get_cache.go` to regenerate.
-const CACHE_NAME = "scream-v0.4.2";
+const CACHE_NAME = "scream-v0.4.4";
 const CACHE_FILES = [
   './css/app.css',
   './fonts/iconoir-font.css',

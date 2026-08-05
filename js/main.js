@@ -211,29 +211,40 @@ function renderTabBar() {
 
 // ── File operations ────────────────────────────────────────────────────────
 
-async function handleOpen() {
-    try {
-        const [handle] = await window.showOpenFilePicker({
-            types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
-        });
-        const file = await handle.getFile();
-        const content = await file.text();
+async function _openFile(file, handle = null) {
+    const content = await file.text();
+    const cur = getActiveTab();
+    if (cur && _isTabPristine(cur)) {
+        cur.fileHandle = handle;
+        cur.filename = file.name;
+        cur.content = content;
+        _activateTab(cur.id, content);
+    } else {
+        createTab(content, file.name, handle);
+    }
+}
 
-        const cur = getActiveTab();
-        if (cur && _isTabPristine(cur)) {
-            // Reuse current pristine tab
-            cur.fileHandle = handle;
-            cur.filename = file.name;
-            cur.content = content;
-            _activateTab(cur.id, content);
-        } else {
-            createTab(content, file.name, handle);
+async function handleOpen() {
+    if (window.showOpenFilePicker) {
+        try {
+            const [handle] = await window.showOpenFilePicker({
+                types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
+            });
+            await _openFile(await handle.getFile(), handle);
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('[Scream] open error:', err);
+                alert(`Could not open file: ${err.message}`);
+            }
         }
-    } catch (err) {
-        if (err.name !== 'AbortError') {
-            console.error('[Scream] open error:', err);
-            alert(`Could not open file: ${err.message}`);
-        }
+    } else {
+        const input = document.getElementById('file-input');
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (file) await _openFile(file);
+            input.value = '';
+        };
+        input.click();
     }
 }
 
